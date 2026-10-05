@@ -1,0 +1,12 @@
+{
+  "name": "study-pet",
+  "version": "0.3.0",
+  "description": "A virtual pet that grows when you finish focused study sessions.",
+  "type": "module",
+  "private": true,
+  "scripts": {
+    "test": "node --test tests/engine.test.mjs",
+    "build": "node build.mjs",
+    "dev": "npx --yes serve ."
+  }
+}
