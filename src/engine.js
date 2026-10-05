@@ -40,6 +40,8 @@ export function createState(now) {
     name: "", sessions: 0, minutes: 0,
     hearts: 3, heartsAt: now,
     streak: 0, lastDay: null, lastStudyAt: null,
+    bestStreak: 0, firstStudyAt: null, grownAt: null,   // for the certificate
+    certName: "", certSeen: false,
     length: 25, active: null, onBreak: null,
     notes: {},
     gift: null,            // notes a friend wrote: { from, notes: { noteId: text } }
@@ -56,6 +58,12 @@ export function migrate(raw, now) {
   const s = Object.assign(createState(now), raw);
   s.notes = raw.notes && typeof raw.notes === "object" ? raw.notes : {};
   s.gift = cleanGift(raw.gift);
+  // Saves from before the certificate: the best streak is at least the current one,
+  // and an already grown pet counts as grown at its last session.
+  s.bestStreak = Math.max(Number.isFinite(raw.bestStreak) ? raw.bestStreak : 0, Number.isFinite(raw.streak) ? raw.streak : 0);
+  if (!Number.isFinite(s.firstStudyAt)) s.firstStudyAt = null;
+  if (!Number.isFinite(s.grownAt)) s.grownAt = s.sessions >= STAGES[STAGES.length - 1].at ? (s.lastStudyAt || now) : null;
+  s.certName = typeof raw.certName === "string" ? raw.certName.slice(0, 40) : "";
   s.days = {};
   if (raw.days && typeof raw.days === "object")
     for (const [k, v] of Object.entries(raw.days)) if (Number.isFinite(v) && v > 0) s.days[k] = v;
@@ -124,9 +132,12 @@ export function completeFocus(s, notesList) {
     s.lastDay = today;
   } else if (!s.streak) s.streak = 1;
   s.lastStudyAt = t;
+  s.bestStreak = Math.max(s.bestStreak, s.streak);
+  if (!s.firstStudyAt) s.firstStudyAt = a.startedAt;
   const breakMinutes = breakLength(s.sessions);
   s.onBreak = { minutes: breakMinutes, endAt: t + breakMinutes * (a.unitMs || 60000) };
   const after = stageIndex(s);
+  if (after === STAGES.length - 1 && !s.grownAt) s.grownAt = t;
   return { grewTo: after > before ? after : null, notes: unlockNotes(s, t, notesList), breakMinutes };
 }
 
@@ -177,6 +188,19 @@ export function unlockNotes(s, now, notesList) {
 }
 export function unreadNotes(s, notesList) {
   return notesList.filter(n => s.notes[n.id] && !s.notes[n.id].read).length;
+}
+
+/* ---------- Certificate ---------- */
+// The long-term goal: sealed until the pet is fully grown, then a certificate
+// of everything the person did to get there.
+export function certificate(s, notesList) {
+  const goal = STAGES[STAGES.length - 1].at;
+  return {
+    earned: !!s.grownAt, goal, progress: Math.min(s.sessions, goal),
+    sessions: s.sessions, minutes: s.minutes, bestStreak: s.bestStreak,
+    notes: notesList.filter(n => s.notes[n.id]).length, totalNotes: notesList.length,
+    since: s.firstStudyAt, grownAt: s.grownAt
+  };
 }
 
 /* ---------- Notes from a friend ---------- */

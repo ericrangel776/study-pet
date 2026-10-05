@@ -115,6 +115,44 @@ test("naming the pet Lila or Daisy turns it into a puppy", async ({ page }) => {
   expect(await frame()).toBe(blob);
 });
 
+test.describe("the sealed certificate", () => {
+  test("shows progress, unseals at full growth, and remembers the name", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 19, minutes: 475, bestStreak: 5, firstStudyAt: MORNING.getTime() - 20 * 864e5 }) });
+    await expect(page.locator("#sealCount")).toHaveText("19 of 20 sessions");
+    await expect(page.locator("#sealMeter")).toHaveAttribute("aria-valuenow", "19");
+    await expect(page.locator("#sealOpen")).toBeHidden();
+
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+    await expect(page.locator("#msg")).toContainText("Your certificate is unsealed");
+    await expect(page.locator("#sealLocked")).toBeHidden();
+    await expect(page.locator("#sealNew")).toBeVisible();
+
+    await page.locator("#sealOpen").click();
+    await expect(page.locator("#certFor")).toContainText("for raising Pip from an egg to a grown-up");
+    await expect(page.locator("#certStats")).toContainText("Focus sessions20");
+    await expect(page.locator("#certStats")).toContainText("Focus time8h 10m");
+    await expect(page.locator("#certStats")).toContainText("Longest streak5 days");
+    await page.locator("#certName").fill("Haylee");
+    await page.locator("#certDlg [data-close]").click();
+    await expect(page.locator("#sealNew")).toBeHidden();
+
+    await page.reload();
+    await page.locator("#sealOpen").click();
+    await expect(page.locator("#certName")).toHaveValue("Haylee");
+  });
+
+  test("prints only the certificate", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime() }) });
+    await page.locator("#sealOpen").click();
+    await page.emulateMedia({ media: "print" });
+    await expect(page.locator("main")).toBeHidden();
+    await expect(page.locator(".cert")).toBeVisible();
+    await expect(page.locator("#certPrint")).toBeHidden();
+  });
+});
+
 test.describe("notes for a friend", () => {
   // Write notes in one browser, then open the link in a fresh one, like a friend would.
   async function writeNotes(page, from, notes) {

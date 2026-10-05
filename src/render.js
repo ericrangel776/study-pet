@@ -135,13 +135,13 @@ function drawHatch(t, now, rm, dog) {
 }
 
 /* ---------- One frame ---------- */
-// v = { now, mood, stage, hearts, unread, hatchAt, growAt, patAt, rm, dog }
+// v = { now, mood, stage, hearts, unread, hatchAt, growAt, patAt, rm, dog, portrait }
 export function draw(ctx, v) {
   cx = ctx;
   const { now, mood: m, stage: st, rm } = v;
   cx.clearRect(0, 0, W, H);
-  for (let k = 0; k < 4; k++) sprite(HEART, 2 + k * 6, 2, k < v.hearts ? INK : GHOST);
-  if (v.unread && Math.floor(now / 500) % 2) sprite(ENVELOPE, 55, 2, INK);
+  if (!v.portrait) for (let k = 0; k < 4; k++) sprite(HEART, 2 + k * 6, 2, k < v.hearts ? INK : GHOST);   // portrait: just the pet, for the certificate
+  if (v.unread && !v.portrait && Math.floor(now / 500) % 2) sprite(ENVELOPE, 55, 2, INK);
 
   if (now - v.hatchAt < HATCH_MS) { drawHatch(now - v.hatchAt, now, rm, v.dog); return; }
 

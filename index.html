@@ -67,6 +67,19 @@
     <section class="notes">
       <h2 id="notesTitle">Notes</h2>
       <ul id="notesList"></ul>
+      <div class="seal" id="sealLocked">
+        <div class="seal-head">
+          <span class="seal-badge" aria-hidden="true"></span>
+          <div><strong>Sealed certificate</strong><span id="sealHint"></span></div>
+        </div>
+        <div class="meter" id="sealMeter" role="progressbar" aria-label="Sessions toward the certificate" aria-valuemin="0"><span id="sealFill"></span></div>
+        <span class="seal-count" id="sealCount"></span>
+      </div>
+      <button class="seal seal-open" id="sealOpen" hidden>
+        <span class="seal-badge open" aria-hidden="true"></span>
+        <span><strong>Your certificate</strong><span>Unsealed! Tap to open it.</span></span>
+        <span class="new" id="sealNew">New</span>
+      </button>
       <div class="notes-links">
         <button class="link" id="giftOpen">Write notes for a friend</button>
         <button class="link" id="giftPasteOpen">Paste a notes link</button>
@@ -130,6 +143,24 @@
     <button class="link" data-close>Cancel</button>
   </div>
   <p class="msg-line" id="restoreStatus" aria-live="polite"></p>
+</dialog>
+
+<dialog id="certDlg" aria-labelledby="certTitle">
+  <div class="cert">
+    <p class="cert-kicker">Study Pet</p>
+    <h2 id="certTitle">Certificate of Achievement</h2>
+    <p class="cert-small">proudly awarded to</p>
+    <input class="cert-name" id="certName" placeholder="Your name" aria-label="Name on the certificate" maxlength="40" autocomplete="name">
+    <p class="cert-for" id="certFor"></p>
+    <canvas id="certPet" width="64" height="48" aria-hidden="true"></canvas>
+    <dl class="cert-stats" id="certStats"></dl>
+    <p class="cert-msg" id="certMsg" hidden></p>
+    <p class="cert-sign" id="certSigned"></p>
+  </div>
+  <div class="row no-print">
+    <button class="primary" id="certPrint">Print or save as PDF</button>
+    <button class="link" data-close>Close</button>
+  </div>
 </dialog>
 
 <dialog id="giftDlg" aria-labelledby="giftDlgTitle">

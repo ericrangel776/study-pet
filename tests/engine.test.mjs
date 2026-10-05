@@ -268,6 +268,41 @@ test("pets named Lila or Daisy, in any capitalization, are puppies", () => {
   }
 });
 
+test("the certificate stays sealed until the pet is fully grown", () => {
+  const s = E.createState(at(2026, 10, 1));
+  for (let i = 0; i < 19; i++) finishSession(s, at(2026, 10, 1 + Math.floor(i / 3), 9 + (i % 3)));
+  let c = E.certificate(s, NOTES);
+  assert.equal(c.earned, false);
+  assert.equal(c.progress, 19);
+  assert.equal(c.goal, 20);
+
+  finishSession(s, at(2026, 10, 8, 9));
+  c = E.certificate(s, NOTES);
+  assert.equal(c.earned, true);
+  assert.equal(c.grownAt, at(2026, 10, 8, 9));
+  assert.equal(c.since, at(2026, 10, 1, 9) - 25 * MIN);   // when the first session started
+  assert.equal(c.sessions, 20);
+  assert.equal(c.bestStreak, 8);
+  assert.equal(c.notes, 6);                               // 20 sessions, 500 minutes and 8 days unlock them all
+});
+
+test("the best streak is kept after a streak ends", () => {
+  const s = E.createState(at(2026, 10, 1));
+  [1, 2, 3, 4].forEach(d => finishSession(s, at(2026, 10, d, 10)));
+  finishSession(s, at(2026, 10, 9, 10));
+  assert.equal(s.streak, 1);
+  assert.equal(s.bestStreak, 4);
+});
+
+test("saves from before the certificate get sensible values", () => {
+  const grown = E.migrate({ version: 3, sessions: 25, minutes: 600, hearts: 2, heartsAt: 1, streak: 3, lastStudyAt: 1234 }, at(2026, 10, 5));
+  assert.equal(grown.grownAt, 1234);
+  assert.equal(grown.bestStreak, 3);
+  assert.equal(E.certificate(grown, NOTES).earned, true);
+  const young = E.migrate({ version: 3, sessions: 4, minutes: 100, hearts: 2, heartsAt: 1 }, at(2026, 10, 5));
+  assert.equal(young.grownAt, null);
+});
+
 test("days ago counts calendar days, not 24-hour periods", () => {
   assert.equal(E.daysAgo(at(2026, 10, 5, 9), at(2026, 10, 5, 22)), 0);
   assert.equal(E.daysAgo(at(2026, 10, 4, 23), at(2026, 10, 5, 9)), 1);
