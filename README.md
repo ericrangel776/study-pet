@@ -16,8 +16,11 @@ src/
   ui.js        Connects everything to the page
 tests/
   engine.test.mjs   Tests for the engine
+e2e/
+  app.spec.mjs      Browser tests for the built app (Playwright)
 scripts/
   icons.mjs    Draws the app icons from the pet's pixel art
+  serve.mjs    Small static server the browser tests use
 icons/         App icons (generated, committed)
 index.html, styles.css   Page structure and styles
 manifest.webmanifest     App name, colors and icons for installing
@@ -30,6 +33,8 @@ build.mjs    Builds the installable app into dist/
 Requires Node.js 20 or newer.
 
 - `npm test` runs the engine tests.
+- `npm run test:browser` builds the app and runs the browser tests in `e2e/` (desktop and phone sizes).
+  The first time, run `npm install` and then `npx playwright install chromium`.
 - `npm run dev` serves the source files locally. Open the address it prints.
   (ES modules don't load from a double-clicked file, so the unbundled version needs a local server.)
   The service worker is off here, so edits always show up on reload.
@@ -55,4 +60,4 @@ After the first visit, the app opens without an internet connection.
 
 - Press **T** in the app to switch to test mode, where sessions last seconds instead of minutes. Nothing done in test mode is saved, and pressing **T** again returns to your real progress.
 - Edit `src/config.js` to change the notes before sharing.
-- Run `npm test` before every commit.
+- Run `npm test` and `npm run test:browser` before every commit.

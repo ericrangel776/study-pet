@@ -9,6 +9,13 @@
     "build": "node build.mjs",
     "dev": "npx --yes serve .",
     "preview": "npm run build && npx --yes serve dist",
-    "icons": "node scripts/icons.mjs"
+    "icons": "node scripts/icons.mjs",
+    "test:browser": "playwright test"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.63.0"
+  },
+  "engines": {
+    "node": ">=20"
   }
 }
