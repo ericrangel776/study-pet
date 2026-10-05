@@ -49,6 +49,18 @@
       <div><dt>Sessions</dt><dd id="stSessions">0</dd></div>
       <div><dt>Focus time</dt><dd id="stTime">0m</dd></div>
     </dl>
+    <section class="week" aria-labelledby="weekTitle">
+      <div class="week-head"><h2 id="weekTitle">This week</h2><span class="week-total" id="weekTotal"></span></div>
+      <div class="week-plot">
+        <div class="week-chart" id="weekChart" aria-hidden="true"></div>
+        <div class="week-tip" id="weekTip" hidden></div>
+      </div>
+      <table class="sr-only">
+        <caption>Focus time each day this week</caption>
+        <thead><tr><th scope="col">Day</th><th scope="col">Focus time</th></tr></thead>
+        <tbody id="weekTable"></tbody>
+      </table>
+    </section>
     <p class="next" id="next"></p>
     <p class="msg" id="msg" aria-live="polite"></p>
 

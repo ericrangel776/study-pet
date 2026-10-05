@@ -2,7 +2,7 @@
 // Every function takes the state (and the current time) as arguments,
 // so the same code can run in the browser, in tests, or later on a server.
 
-export const SAVE_VERSION = 2;
+export const SAVE_VERSION = 3;
 export const HEART_MS = 12 * 3600e3;   // one heart fades every 12 hours
 export const MAX_HEARTS = 4;
 export const SHORT_BREAK = 5;
@@ -42,16 +42,21 @@ export function createState(now) {
     streak: 0, lastDay: null, lastStudyAt: null,
     length: 25, active: null, onBreak: null,
     notes: {},
+    days: {},              // minutes studied per calendar day, keyed by dayKey()
     settings: { sound: true, notify: false, lastBackupAt: null }
   };
 }
 
 // Upgrade any older save to the current shape. Version 1 saves had no
-// version number, no break mode, and no settings.
+// version number, no break mode, and no settings. Version 2 saves had no daily
+// history, so their history starts empty (the totals are kept).
 export function migrate(raw, now) {
   if (!raw || typeof raw !== "object") return createState(now);
   const s = Object.assign(createState(now), raw);
   s.notes = raw.notes && typeof raw.notes === "object" ? raw.notes : {};
+  s.days = {};
+  if (raw.days && typeof raw.days === "object")
+    for (const [k, v] of Object.entries(raw.days)) if (Number.isFinite(v) && v > 0) s.days[k] = v;
   s.settings = Object.assign(createState(now).settings, raw.settings || {});
   if (!raw.version) s.onBreak = null;
   s.version = SAVE_VERSION;
@@ -108,6 +113,7 @@ export function completeFocus(s, notesList) {
   s.hearts = Math.min(MAX_HEARTS, heartsNow(s, t) + 2);
   s.heartsAt = t;
   const today = dayKey(t);
+  s.days[today] = (s.days[today] || 0) + a.minutes;
   if (s.lastDay !== today) {
     s.streak = s.lastDay === prevDayKey(t) ? s.streak + 1 : 1;
     s.lastDay = today;
@@ -132,6 +138,19 @@ export function tickState(s, now, notesList) {
     return { type: "breakDone" };
   }
   return null;
+}
+
+/* ---------- History ---------- */
+// The last 7 calendar days, oldest first, ending today.
+export function lastWeek(s, now) {
+  const out = [], d = new Date(now);
+  d.setDate(d.getDate() - 6);
+  for (let k = 0; k < 7; k++) {
+    const key = dayKey(d.getTime());
+    out.push({ key, time: d.getTime(), minutes: s.days[key] || 0 });
+    d.setDate(d.getDate() + 1);
+  }
+  return out;
 }
 
 /* ---------- Notes ---------- */

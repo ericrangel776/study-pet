@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { PERSONAL, NOTES, LENGTHS } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo } from "./engine.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek } from "./engine.js";
 import { localStore } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing } from "./alerts.js";
@@ -35,6 +35,10 @@ function ago(t) {
   return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
 }
 const say = t => { $("msg").textContent = t; };
+function fmtMinutes(total) {
+  const hrs = Math.floor(total / 60), mins = total % 60;
+  return hrs ? `${hrs}h ${mins}m` : `${mins}m`;
+}
 
 /* ---------- Timer events ---------- */
 function alertUser(title, body, tones) {
@@ -119,8 +123,7 @@ function render() {
   $("petName").textContent = nameOr();
   $("stStreak").textContent = streakNow(state, now);
   $("stSessions").textContent = state.sessions;
-  const hrs = Math.floor(state.minutes / 60), mins = state.minutes % 60;
-  $("stTime").textContent = hrs ? `${hrs}h ${mins}m` : `${mins}m`;
+  $("stTime").textContent = fmtMinutes(state.minutes);
   const nx = STAGES[st + 1], left = nx ? nx.at - state.sessions : 0;
   $("next").textContent = nx
     ? (st === 0 ? "One finished session hatches the egg."
@@ -134,7 +137,75 @@ function render() {
   $("resetBtn").textContent = now < resetArmed ? "Tap again to erase everything" : "Start over";
   $("testTag").hidden = !testMode;
   renderNotes();
+  renderWeek(now);
 }
+
+// One column per day. Only the best day gets a value on its cap; the tooltip
+// and the screen-reader table carry the rest.
+let weekSig = "";
+const BAR_MAX = 64;   // px; the column leaves room above for the cap label
+function renderWeek(now) {
+  const week = lastWeek(state, now);
+  const sig = dayKey(now) + JSON.stringify(week.map(d => d.minutes));
+  if (sig === weekSig) return;
+  weekSig = sig;
+
+  const total = week.reduce((a, d) => a + d.minutes, 0);
+  $("weekTotal").textContent = fmtMinutes(total);
+  const top = Math.max(...week.map(d => d.minutes));
+  const scale = Math.max(60, top);   // an hour fills the chart; light weeks don't look maxed out
+  const chart = $("weekChart"), rows = $("weekTable");
+  chart.innerHTML = ""; rows.innerHTML = "";
+  week.forEach((d, i) => {
+    const today = i === 6;
+    const short = today ? "Today" : new Date(d.time).toLocaleDateString(undefined, { weekday: "short" });
+    const long = today ? "Today" : new Date(d.time).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
+
+    const day = document.createElement("div");
+    day.className = "week-day" + (today ? " today" : "");
+    day.dataset.tip = `${long}: ${d.minutes ? fmtMinutes(d.minutes) : "no focus time"}`;
+    const col = document.createElement("div");
+    col.className = "week-col";
+    if (d.minutes) {
+      if (d.minutes === top) {
+        const cap = document.createElement("span");
+        cap.className = "week-cap"; cap.textContent = fmtMinutes(d.minutes);
+        col.appendChild(cap);
+      }
+      const bar = document.createElement("div");
+      bar.className = "week-bar";
+      bar.style.height = Math.max(3, Math.round(d.minutes / scale * BAR_MAX)) + "px";
+      col.appendChild(bar);
+    }
+    const lbl = document.createElement("span");
+    lbl.className = "week-lbl"; lbl.textContent = short;
+    day.append(col, lbl);
+    chart.appendChild(day);
+
+    const tr = document.createElement("tr");
+    const th = document.createElement("th"), td = document.createElement("td");
+    th.scope = "row"; th.textContent = long; td.textContent = fmtMinutes(d.minutes);
+    tr.append(th, td); rows.appendChild(tr);
+  });
+}
+
+// Hover (or tap) a day to see its exact time. The whole column is the target, not just the bar.
+function showWeekTip(e) {
+  const day = e.target.closest(".week-day"), tip = $("weekTip");
+  if (!day) { tip.hidden = true; return; }
+  tip.textContent = day.dataset.tip;
+  const plot = $("weekChart").getBoundingClientRect(), r = day.getBoundingClientRect();
+  tip.hidden = false;
+  const half = tip.offsetWidth / 2;   // keep the tip inside the card at the first and last day
+  tip.style.left = Math.min(plot.width - half, Math.max(half, r.left - plot.left + r.width / 2)) + "px";
+  // Sit just above the bar (or the baseline on an empty day), never above the chart's top.
+  const mark = day.querySelector(".week-bar") || day.querySelector(".week-col");
+  const anchor = mark.classList.contains("week-bar") ? mark.getBoundingClientRect().top : mark.getBoundingClientRect().bottom;
+  tip.style.top = Math.max(0, anchor - plot.top - tip.offsetHeight - 6) + "px";
+}
+$("weekChart").addEventListener("pointerover", showWeekTip);
+$("weekChart").addEventListener("pointerdown", showWeekTip);
+$("weekChart").addEventListener("pointerleave", () => { $("weekTip").hidden = true; });
 
 /* ---------- Dialogs ---------- */
 const show = d => (d.showModal ? d.showModal() : d.setAttribute("open", ""));

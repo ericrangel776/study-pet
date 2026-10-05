@@ -2,7 +2,7 @@
   --bg:#EEEAF8; --ink:#2A2440; --muted:#635B80; --panel:#FFFFFF; --line:#D8D1EE;
   --shell:#8F7FD0; --shell-hi:#B3A7E6; --shell-lo:#6A5AAE; --bezel:#3B335F;
   --btn:#F2C14E; --btn-lo:#C9982A; --chip:#E4DEF6; --chip-on:#2A2440; --chip-on-ink:#FFFFFF;
-  --lcd:#B9C79A; --lcd-ink:#28331F;
+  --lcd:#B9C79A; --lcd-ink:#28331F; --bar:#8F7FD0;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px);
   padding-bottom:env(safe-area-inset-bottom,0px);
@@ -11,13 +11,13 @@
   :root:not([data-theme="light"]){
     --bg:#1C1928; --ink:#ECE8F8; --muted:#A79FC4; --panel:#262236; --line:#3A3452;
     --shell:#6E5FB5; --shell-hi:#8E80CF; --shell-lo:#4C3F8C; --bezel:#2A2347;
-    --chip:#332D48; --chip-on:#F2C14E; --chip-on-ink:#2A2440;
+    --chip:#332D48; --chip-on:#F2C14E; --chip-on-ink:#2A2440; --bar:#8E80CF;
   }
 }
 :root[data-theme="dark"]{
   --bg:#1C1928; --ink:#ECE8F8; --muted:#A79FC4; --panel:#262236; --line:#3A3452;
   --shell:#6E5FB5; --shell-hi:#8E80CF; --shell-lo:#4C3F8C; --bezel:#2A2347;
-  --chip:#332D48; --chip-on:#F2C14E; --chip-on-ink:#2A2440;
+  --chip:#332D48; --chip-on:#F2C14E; --chip-on-ink:#2A2440; --bar:#8E80CF;
 }
 *,*::before,*::after{box-sizing:inherit}
 html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -73,6 +73,24 @@ main{max-width:940px;margin:0 auto;padding:44px 20px 56px;display:grid;
 .stats div{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px 12px 10px}
 .stats dt{font-size:13px;color:var(--muted)}
 .stats dd{margin:0;font-size:24px;font-weight:600;line-height:1.2}
+/* This week: one column per day, minutes studied */
+.week{background:var(--panel);border:1px solid var(--line);border-radius:16px;padding:12px 14px 10px;margin:0 0 16px}
+.week-head{display:flex;justify-content:space-between;align-items:baseline;gap:10px;margin-bottom:6px}
+.week h2{font-size:15px;font-weight:500;margin:0}
+.week-total{font-size:15px;font-weight:600}
+.week-plot{position:relative}
+.week-chart{display:grid;grid-template-columns:repeat(7,minmax(0,1fr));align-items:end}
+.week-day{display:flex;flex-direction:column;align-items:center;cursor:default}
+.week-col{position:relative;height:84px;width:100%;display:flex;flex-direction:column;justify-content:flex-end;align-items:center;
+  border-bottom:1px solid var(--line)}
+.week-bar{width:min(24px,70%);background:var(--bar);border-radius:4px 4px 0 0}
+.week-cap{font-size:12px;font-weight:500;line-height:1;margin-bottom:4px;white-space:nowrap}
+.week-lbl{font-size:12px;color:var(--muted);margin-top:4px}
+.week-day.today .week-lbl{color:var(--ink);font-weight:600}
+.week-tip{position:absolute;top:0;transform:translateX(-50%);background:var(--ink);color:var(--bg);
+  font-size:13px;line-height:1.3;padding:5px 9px;border-radius:8px;white-space:nowrap;pointer-events:none;z-index:1}
+.week-tip[hidden]{display:none}
+.sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .next{margin:0 0 16px;color:var(--muted)}
 .msg{min-height:3.2em;background:var(--panel);border:1px solid var(--line);border-radius:16px 16px 16px 4px;padding:12px 14px;margin:0 0 24px}
 .msg:empty{visibility:hidden}
