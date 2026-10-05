@@ -209,6 +209,19 @@ test("history survives a backup and restore", () => {
   assert.deepEqual(restored.days, s.days);
 });
 
+test("a backup nudge appears only when progress could be lost", () => {
+  const now = at(2026, 10, 12);
+  const s = E.createState(at(2026, 10, 1));
+  assert.equal(E.needsBackup(s, now, false), false);               // nothing to lose yet
+  finishSession(s, at(2026, 10, 1, 10));
+  assert.equal(E.needsBackup(s, now, false), true);                // never backed up
+  assert.equal(E.needsBackup(s, now, true), false);                // the browser keeps the data
+  s.settings.lastBackupAt = at(2026, 10, 6, 20);
+  assert.equal(E.needsBackup(s, now, false), false);               // 6 days ago
+  s.settings.lastBackupAt = at(2026, 10, 5, 8);
+  assert.equal(E.needsBackup(s, now, false), true);                // 7 days ago
+});
+
 test("days ago counts calendar days, not 24-hour periods", () => {
   assert.equal(E.daysAgo(at(2026, 10, 5, 9), at(2026, 10, 5, 22)), 0);
   assert.equal(E.daysAgo(at(2026, 10, 4, 23), at(2026, 10, 5, 9)), 1);

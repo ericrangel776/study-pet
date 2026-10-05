@@ -123,6 +123,8 @@ dialog input{width:100%;font:inherit;padding:10px 14px;border-radius:12px;border
 .switch input{width:20px;height:20px;accent-color:var(--shell);margin:0}
 .backup-row{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 8px}
 .secondary{background:var(--chip);border:0;border-radius:999px;padding:8px 18px;font-weight:500;cursor:pointer}
+.secondary.nudge{background:var(--btn);color:#2A2440}
+.secondary:disabled{opacity:.5;cursor:not-allowed}
 .hint{font-size:14px;color:var(--muted);margin:0 0 24px}
 .hint[hidden],#installBtn[hidden]{display:none}
 #installBtn{margin:0 0 8px}

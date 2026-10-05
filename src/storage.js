@@ -14,3 +14,13 @@ export const localStore = {
     catch (e) { return false; }
   }
 };
+
+// Ask the browser not to clear this site's data when space runs low or, in
+// Safari, after 7 days without a visit. Chrome and Safari decide quietly based
+// on how the site is used; Firefox asks the person. Resolves true when granted.
+export async function askToKeepData() {
+  try {
+    if (!navigator.storage || !navigator.storage.persist) return false;
+    return (await navigator.storage.persisted()) || (await navigator.storage.persist());
+  } catch (e) { return false; }
+}

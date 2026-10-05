@@ -1,8 +1,8 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { PERSONAL, NOTES, LENGTHS } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek } from "./engine.js";
-import { localStore } from "./storage.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup } from "./engine.js";
+import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing } from "./alerts.js";
 import { registerServiceWorker, watchInstall, promptInstall, isIOS, isInstalled } from "./pwa.js";
@@ -19,6 +19,13 @@ const unitMs = () => (testMode ? 1000 : 60000);
 // Test mode plays with a copy that is never saved, so practice runs can't
 // add sessions, streak days or notes to the real pet.
 const save = () => (testMode ? true : store.save(state));
+
+// Once there's progress, ask the browser to keep it. dataKept is true when it agrees.
+let dataKept = false;
+function protectProgress() {
+  if (dataKept || testMode || state.sessions === 0) return;
+  askToKeepData().then(ok => { dataKept = ok; });
+}
 
 const MOOD_TEXT = {
   egg: "Study once to hatch", happy: "Happy", hungry: "Hungry, time to study",
@@ -59,6 +66,7 @@ function handleEvent(ev) {
     if (!ev.breakSkipped) text += ` Enjoy a ${ev.breakMinutes}-minute break.`;
     say(text);
     alertUser("Session complete!", text, [660, 880, 1320]);
+    protectProgress();
   } else if (ev.type === "breakDone") {
     const text = `Break's over. ${nameOr()} is ready when you are.`;
     say(text);
@@ -130,14 +138,27 @@ function render() {
        : `${left} more ${left === 1 ? "session" : "sessions"} until ${nameOr()} grows.`)
     : `${nameOr()} is fully grown. Keep the streak going.`;
 
-  const last = ago(state.settings.lastBackupAt);
-  $("backupHint").textContent = testMode ? "Backup and restore are off in test mode."
-    : last ? `Last backed up ${last}.` : "Not backed up yet. Your progress only lives in this browser.";
+  renderBackupHint(now);
   $("backupBtn").disabled = $("restoreBtn").disabled = testMode;
   $("resetBtn").textContent = now < resetArmed ? "Tap again to erase everything" : "Start over";
   $("testTag").hidden = !testMode;
   renderNotes();
   renderWeek(now);
+}
+
+// Safari erases a website's data after 7 days without a visit unless it's on
+// the Home Screen, so iPhone users in the browser always see that risk.
+function renderBackupHint(now) {
+  const last = ago(state.settings.lastBackupAt);
+  const lastText = last ? `Last backed up ${last}.` : "Not backed up yet.";
+  const safariRisk = isIOS() && !isInstalled() && state.sessions > 0;
+  const nudge = !testMode && (safariRisk || needsBackup(state, now, dataKept || isInstalled()));
+  $("backupHint").textContent = testMode ? "Backup and restore are off in test mode."
+    : safariRisk ? `${lastText} Safari can erase website data after 7 days without a visit. Add Study Pet to your Home Screen, or back up.`
+    : nudge ? `${lastText} Your progress only lives in this browser, so it's worth backing up.`
+    : dataKept && !last ? "Your browser will keep your progress. A backup helps if you switch devices."
+    : lastText;
+  $("backupBtn").classList.toggle("nudge", nudge);
 }
 
 // One column per day. Only the best day gets a value on its cap; the tooltip
@@ -393,6 +414,7 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) stop
 
 unlockNotes(state, Date.now(), NOTES);
 save();
+protectProgress();
 setInterval(tick, 100);
 tick();
 if (!state.name) openName();

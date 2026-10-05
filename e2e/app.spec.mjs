@@ -138,6 +138,44 @@ test("the weekly chart shows each day, with details on tap or hover", async ({ p
   await expect(page.getByRole("table")).toContainText("Friday, Oct 2");
 });
 
+test.describe("keeping progress safe", () => {
+  const refuseStorage = page => page.addInitScript(() => {
+    navigator.storage.persisted = async () => false;
+    navigator.storage.persist = async () => false;
+  });
+
+  test("nudges for a backup when the browser won't promise to keep the pet", async ({ page }) => {
+    await refuseStorage(page);
+    await open(page, { save: petSave() });
+    await expect(page.locator("#backupHint")).toContainText("worth backing up");
+    await expect(page.locator("#backupBtn")).toHaveClass(/nudge/);
+
+    await page.locator("#backupBtn").click();
+    await page.evaluate(() => { document.execCommand = () => true; });   // stand-in for the clipboard
+    await page.locator("#copyBtn").click();
+    await page.locator("#backupDlg [data-close]").click();
+    await expect(page.locator("#backupHint")).toHaveText("Last backed up today.");
+    await expect(page.locator("#backupBtn")).not.toHaveClass(/nudge/);
+  });
+
+  test("doesn't nudge before there's any progress", async ({ page }) => {
+    await refuseStorage(page);
+    await open(page);
+    await nameThePet(page);
+    await expect(page.locator("#backupBtn")).not.toHaveClass(/nudge/);
+  });
+
+  test.describe("on an iPhone in Safari", () => {
+    test.use({ userAgent: "Mozilla/5.0 (iPhone; CPU iPhone OS 18_0 like Mac OS X) AppleWebKit/605.1.15 (KHTML, like Gecko) Version/18.0 Mobile/15E148 Safari/604.1" });
+
+    test("warns about the 7-day rule and suggests the Home Screen", async ({ page }) => {
+      await open(page, { save: petSave({ settings: { sound: false, notify: false, lastBackupAt: MORNING.getTime() } }) });
+      await expect(page.locator("#backupHint")).toContainText("Safari can erase website data after 7 days");
+      await expect(page.locator("#installHint")).toContainText("Add to Home Screen");
+    });
+  });
+});
+
 test.describe("installed app", () => {
   test.use({ serviceWorkers: "allow" });
 
