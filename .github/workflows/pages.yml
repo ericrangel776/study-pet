@@ -1,4 +1,4 @@
-# Tests, builds and publishes the app to GitHub Pages on every push to main.
+# Runs all checks, then builds and publishes the app to GitHub Pages on every push to main.
 name: Deploy to Pages
 
 on:
@@ -16,14 +16,17 @@ concurrency:
   cancel-in-progress: true
 
 jobs:
+  checks:
+    uses: ./.github/workflows/checks.yml
+
   build:
+    needs: checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-      - run: npm test
       - run: npm run build
       - uses: actions/upload-pages-artifact@v3
         with:

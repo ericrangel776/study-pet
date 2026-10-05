@@ -46,7 +46,8 @@ Requires Node.js 20 or newer.
 
 https://ericrangel776.github.io/study-pet/
 
-Every push to `main` runs the tests, builds `dist/` and publishes it to GitHub Pages
+Every pull request runs the engine and browser tests (`.github/workflows/checks.yml`).
+Every push to `main` runs the same checks, builds `dist/` and publishes it to GitHub Pages
 (see `.github/workflows/pages.yml`). If the tests fail, the site isn't updated.
 
 ## Installing
