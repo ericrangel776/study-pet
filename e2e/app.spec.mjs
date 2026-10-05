@@ -244,7 +244,7 @@ test.describe("invites", () => {
 
   test("a full invite welcomes a new friend and follows them to the certificate", async ({ page, browser }) => {
     await open(page, { save: petSave() });
-    const link = await buildInvite(page, { from: "Eric", to: "Haylee", welcome: "Made this for you 💜", accessory: "Bow",
+    const link = await buildInvite(page, { from: "Jamie", to: "Riley", welcome: "Made this for you 💜", accessory: "Bow",
       ps: { hatch: "So proud of you!" }, letter: "You did it. Dinner's on me." });
     await expect(page.locator("#invStatus")).toContainText("Link ready with 3 extras");
     expect(link).toMatch(/#invite=[\w-]+$/);
@@ -252,24 +252,24 @@ test.describe("invites", () => {
     const friend = await browser.newPage();
     await friend.clock.install({ time: MORNING });
     await friend.goto(link);
-    await expect(friend.locator("#welcomeTitle")).toHaveText("For Haylee, from Eric");
+    await expect(friend.locator("#welcomeTitle")).toHaveText("For Riley, from Jamie");
     await expect(friend.locator("#welcomeMsg")).toHaveText("Made this for you 💜");
     await expect(friend.locator("#welcomeExtras")).toContainText("Your pet wears a bow.");
-    await expect(friend.locator("#welcomeExtras")).toContainText("Eric sealed a message inside your certificate.");
+    await expect(friend.locator("#welcomeExtras")).toContainText("Jamie sealed a message inside your certificate.");
     expect(friend.url()).not.toContain("#invite");                          // removed from the address bar
     await friend.locator("#welcomeDlg [data-close]").click();
-    await expect(friend.locator("#userInput")).toHaveValue("Haylee");         // the name prompt comes after the welcome, pre-filled
+    await expect(friend.locator("#userInput")).toHaveValue("Riley");         // the name prompt comes after the welcome, pre-filled
     await nameThePet(friend, "Bo");
-    await expect(friend.locator("#dedication")).toHaveText("For Haylee, from Eric");
-    await expect(friend.locator("#sealHint")).toContainText("Eric left a message inside");
-    await expect(friend.locator(".locked", { hasText: "hatch the egg" })).toContainText("P.S. from Eric");
+    await expect(friend.locator("#dedication")).toHaveText("For Riley, from Jamie");
+    await expect(friend.locator("#sealHint")).toContainText("Jamie left a message inside");
+    await expect(friend.locator(".locked", { hasText: "hatch the egg" })).toContainText("P.S. from Jamie");
 
     await friend.getByRole("radio", { name: "15 min" }).check();
     await friend.locator("#keyFocus").click();
     await friend.clock.fastForward("15:01");
     await friend.locator(".note-btn", { hasText: "Hatch the egg" }).click();
     await expect(friend.locator("#noteText")).toHaveText("You hatched me! I'll keep you company while you study.");
-    await expect(friend.locator("#notePS")).toHaveText("P.S. from Eric: So proud of you!");
+    await expect(friend.locator("#notePS")).toHaveText("P.S. from Jamie: So proud of you!");
     await friend.locator("#noteDlg [data-close]").click();
 
     // Jump to a grown pet to read the certificate.
@@ -280,8 +280,8 @@ test.describe("invites", () => {
     }, KEY);
     await friend.reload();
     await friend.locator("#sealOpen").click();
-    await expect(friend.locator("#certName")).toHaveText("Haylee");
-    await expect(friend.locator("#certMsg")).toHaveText("“You did it. Dinner's on me.”\nFrom Eric");
+    await expect(friend.locator("#certName")).toHaveText("Riley");
+    await expect(friend.locator("#certMsg")).toHaveText("“You did it. Dinner's on me.”\nFrom Jamie");
     await friend.close();
   });
 
@@ -338,7 +338,7 @@ test.describe("invites", () => {
 
   test("the certificate invites the next person, from them by name", async ({ page }) => {
     await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime(),
-      invite: { from: "Eric", to: "Haylee", welcome: "", ps: {}, letter: "", accessory: null } }) });
+      invite: { from: "Jamie", to: "Riley", welcome: "", ps: {}, letter: "", accessory: null } }) });
     await page.locator("#sealOpen").click();
     await page.locator("#certInvite").click();
     await expect(page.locator("#inviteDlg")).toBeVisible();

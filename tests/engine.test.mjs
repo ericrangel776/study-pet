@@ -223,7 +223,7 @@ test("a backup nudge appears only when progress could be lost", () => {
 });
 
 const fullInvite = {
-  from: "Eric", to: "Haylee", welcome: "Made this for you 💜", ps: { hatch: "¡Lo lograste! 🎉", streak3: "Proud of you." },
+  from: "Jamie", to: "Riley", welcome: "Made this for you 💜", ps: { hatch: "¡Lo lograste! 🎉", streak3: "Proud of you." },
   letter: "You did it. Dinner's on me.", accessory: "bow"
 };
 
@@ -272,7 +272,7 @@ test("accepting an invite adds P.S. lines, gifts and the person's name", () => {
   assert.equal(E.notePS(s, hatch), "¡Lo lograste! 🎉");
   assert.equal(E.notePS(s, five), "");
   assert.equal(s.notes.hatch.read, false);                 // gained a P.S., so it's new again
-  assert.equal(s.userName, "Haylee");
+  assert.equal(s.userName, "Riley");
   assert.equal(E.isPuppy(s, DOG_NAMES), false);             // invites never make a puppy
   assert.equal(E.accessory(s), "bow");
   const restored = E.importBackup(E.exportBackup(s, at(2026, 10, 1, 11)), at(2026, 10, 2));
@@ -281,15 +281,15 @@ test("accepting an invite adds P.S. lines, gifts and the person's name", () => {
 
 test("an invite doesn't overwrite the person's own name", () => {
   const s = E.createState(0);
-  s.userName = "Hay";
+  s.userName = "Ri";
   E.applyInvite(s, fullInvite);
-  assert.equal(s.userName, "Hay");
+  assert.equal(s.userName, "Ri");
 });
 
 test("older saves keep the person's name from the certificate or an invite", () => {
   const base = { version: 3, sessions: 2, minutes: 50, hearts: 2, heartsAt: 1 };
-  assert.equal(E.migrate({ ...base, certName: " Haylee " }, 0).userName, "Haylee");
-  assert.equal(E.migrate({ ...base, invite: { ...fullInvite, to: "Hay" } }, 0).userName, "Hay");
+  assert.equal(E.migrate({ ...base, certName: " Riley " }, 0).userName, "Riley");
+  assert.equal(E.migrate({ ...base, invite: { ...fullInvite, to: "Ri" } }, 0).userName, "Ri");
   assert.equal(E.migrate({ ...base, userName: "H", certName: "Other" }, 0).userName, "H");
   assert.equal(E.migrate(base, 0).userName, "");
   assert.equal("certName" in E.migrate({ ...base, certName: "x" }, 0), false);
