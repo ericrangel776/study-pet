@@ -26,6 +26,12 @@ export function prevDayKey(t) {
   d.setDate(d.getDate() - 1);
   return dayKey(d.getTime());
 }
+// Calendar days between two times: 11pm yesterday is 1 day ago at 9am today.
+// Rounding absorbs the extra or missing hour on daylight saving days.
+export function daysAgo(t, now) {
+  const midnight = x => { const d = new Date(x); return new Date(d.getFullYear(), d.getMonth(), d.getDate()).getTime(); };
+  return Math.round((midnight(now) - midnight(t)) / 86400e3);
+}
 
 /* ---------- State ---------- */
 export function createState(now) {

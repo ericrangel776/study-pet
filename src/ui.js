@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { PERSONAL, NOTES, LENGTHS } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey } from "./engine.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo } from "./engine.js";
 import { localStore } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing } from "./alerts.js";
@@ -9,13 +9,15 @@ import { unlockAudio, playChime, notifySupported, requestNotify, sendNotificatio
 const $ = id => document.getElementById(id);
 const store = localStore;
 let state = migrate(store.load(), Date.now());
-const save = () => store.save(state);
 
 const canvas = $("screen"), ctx = canvas.getContext("2d");
 const RM = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
 let testMode = false, patAt = 0, hatchAt = 0, growAt = 0, stopArmed = 0, resetArmed = 0;
 let downloads = null, notesSig = "";
 const unitMs = () => (testMode ? 1000 : 60000);
+// Test mode plays with a copy that is never saved, so practice runs can't
+// add sessions, streak days or notes to the real pet.
+const save = () => (testMode ? true : store.save(state));
 
 const MOOD_TEXT = {
   egg: "Study once to hatch", happy: "Happy", hungry: "Hungry, time to study",
@@ -28,7 +30,7 @@ function fmt(ms) {
 }
 function ago(t) {
   if (!t) return null;
-  const days = Math.floor((Date.now() - t) / 86400e3);
+  const days = daysAgo(t, Date.now());
   return days <= 0 ? "today" : days === 1 ? "yesterday" : `${days} days ago`;
 }
 const say = t => { $("msg").textContent = t; };
@@ -125,7 +127,9 @@ function render() {
     : `${nameOr()} is fully grown. Keep the streak going.`;
 
   const last = ago(state.settings.lastBackupAt);
-  $("backupHint").textContent = last ? `Last backed up ${last}.` : "Not backed up yet. Your progress only lives in this browser.";
+  $("backupHint").textContent = testMode ? "Backup and restore are off in test mode."
+    : last ? `Last backed up ${last}.` : "Not backed up yet. Your progress only lives in this browser.";
+  $("backupBtn").disabled = $("restoreBtn").disabled = testMode;
   $("resetBtn").textContent = now < resetArmed ? "Tap again to erase everything" : "Start over";
   $("testTag").hidden = !testMode;
   renderNotes();
@@ -193,7 +197,12 @@ LENGTHS.forEach(n => {
 });
 
 /* ---------- Settings ---------- */
-$("soundToggle").checked = state.settings.sound;
+// Match the checkboxes to the current state, after loading, restoring, resetting or switching test mode.
+function syncSettings() {
+  $("soundToggle").checked = state.settings.sound;
+  if (notifySupported()) $("notifyToggle").checked = state.settings.notify && Notification.permission === "granted";
+}
+syncSettings();
 $("soundToggle").addEventListener("change", e => {
   state.settings.sound = e.target.checked; save();
   if (e.target.checked) { unlockAudio(); playChime([880]); }
@@ -201,7 +210,6 @@ $("soundToggle").addEventListener("change", e => {
 
 if (!notifySupported()) $("notifyRow").hidden = true;
 else {
-  $("notifyToggle").checked = state.settings.notify && Notification.permission === "granted";
   $("notifyToggle").addEventListener("change", async e => {
     if (!e.target.checked) { state.settings.notify = false; save(); return; }
     const result = await requestNotify();
@@ -253,7 +261,7 @@ $("restoreGo").addEventListener("click", () => {
   try {
     state = importBackup($("restoreCode").value, Date.now());
     save(); notesSig = "";
-    $("soundToggle").checked = state.settings.sound;
+    syncSettings();
     hide($("restoreDlg"));
     say(`Welcome back, ${nameOr()}! Your progress is restored.`);
     render();
@@ -264,14 +272,24 @@ $("restoreGo").addEventListener("click", () => {
 
 $("resetBtn").addEventListener("click", () => {
   if (Date.now() < resetArmed) {
-    state = createState(Date.now()); save(); resetArmed = 0; notesSig = ""; say(""); render(); openName();
+    state = createState(Date.now()); save(); resetArmed = 0; notesSig = ""; syncSettings(); say(""); render(); openName();
   } else { resetArmed = Date.now() + 4000; render(); }
 });
 
-/* Press T (outside text fields) to toggle test mode: sessions last seconds instead of minutes */
+/* Press T (outside text fields and dialogs) to toggle test mode: sessions last seconds instead of minutes */
+function setTestMode(on) {
+  testMode = on;
+  if (!on) state = migrate(store.load(), Date.now());   // drop the practice copy, back to the real save
+  hatchAt = growAt = patAt = 0; stopArmed = resetArmed = 0; notesSig = "";
+  stopFlash(); syncSettings();
+  say(on ? "Test mode on. Sessions last seconds, and nothing here is saved."
+         : `Test mode off. Back to ${nameOr()}'s real progress.`);
+  render();
+}
 document.addEventListener("keydown", e => {
-  if ((e.key === "t" || e.key === "T") && !/input|textarea/i.test(e.target.tagName) && !state.active) {
-    testMode = !testMode; render();
+  if ((e.key === "t" || e.key === "T") && !/input|textarea/i.test(e.target.tagName)
+      && !state.active && !document.querySelector("dialog[open]")) {
+    setTestMode(!testMode);
   }
 });
 
