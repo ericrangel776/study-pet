@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
-import { PERSONAL, NOTES, LENGTHS } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup } from "./engine.js";
+import { NOTES, LENGTHS } from "./config.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, GIFT_LIMITS, cleanGift, encodeGift, decodeGift, sameGift, applyGift, noteText } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing, wakeLockSupported, keepAwake } from "./alerts.js";
@@ -32,6 +32,8 @@ const MOOD_TEXT = {
   sleepy: "Sleepy, misses you", focus: "Studying with you", break: "Break time, play!"
 };
 const nameOr = () => state.name || "Your pet";
+// Notes come from a friend if someone sent theirs, otherwise from the pet itself.
+const notesFrom = () => (state.gift ? state.gift.from : nameOr());
 function fmt(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000)), m = Math.floor(s / 60);
   return String(m).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
@@ -62,7 +64,7 @@ function handleEvent(ev) {
     if (ev.grewTo === 1) { hatchAt = Date.now(); text = `${nameOr()} hatched!`; }
     else if (ev.grewTo) { growAt = Date.now(); text = `${nameOr()} grew into a ${STAGES[ev.grewTo].name}!`; }
     else text = `Session done. ${nameOr()} had a snack.`;
-    if (ev.notes.length) text += ` You unlocked ${ev.notes.length === 1 ? "a note" : ev.notes.length + " notes"} from ${PERSONAL.from}.`;
+    if (ev.notes.length) text += ` You unlocked ${ev.notes.length === 1 ? "a note" : ev.notes.length + " notes"} from ${notesFrom()}.`;
     if (!ev.breakSkipped) text += ` Enjoy a ${ev.breakMinutes}-minute break.`;
     say(text);
     alertUser("Session complete!", text, [660, 880, 1320]);
@@ -77,10 +79,10 @@ function handleEvent(ev) {
 
 /* ---------- Rendering ---------- */
 function renderNotes() {
-  const sig = JSON.stringify(state.notes);
+  const sig = JSON.stringify([state.notes, state.gift && state.gift.from, state.name]);
   if (sig === notesSig) return;      // only rebuild when notes change, so buttons keep focus
   notesSig = sig;
-  $("notesTitle").textContent = `Notes from ${PERSONAL.from}`;
+  $("notesTitle").textContent = `Notes from ${notesFrom()}`;
   const ul = $("notesList");
   ul.innerHTML = "";
   NOTES.forEach(n => {
@@ -234,8 +236,8 @@ const hide = d => (d.close ? d.close() : d.removeAttribute("open"));
 document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => hide(b.closest("dialog"))));
 
 function openNote(n) {
-  $("noteTitle").textContent = `A note from ${PERSONAL.from}`;
-  $("noteText").textContent = n.text;
+  $("noteTitle").textContent = `A note from ${notesFrom()}`;
+  $("noteText").textContent = noteText(state, n);
   state.notes[n.id].read = true;
   save(); show($("noteDlg")); render();
 }
@@ -400,6 +402,86 @@ document.addEventListener("keydown", e => {
   } catch (e) { downloads = null; }
 })();
 
+/* ---------- Notes for a friend ---------- */
+// Writing: one box per milestone. What's typed stays put if the dialog is closed and reopened.
+$("giftFrom").maxLength = GIFT_LIMITS.from;
+NOTES.forEach(n => {
+  const label = document.createElement("label"), span = document.createElement("span"), box = document.createElement("textarea");
+  label.className = "field";
+  span.textContent = `When they ${n.hint.charAt(0).toLowerCase() + n.hint.slice(1)}`.replace("your pet", "their pet");
+  box.dataset.note = n.id; box.maxLength = GIFT_LIMITS.note; box.placeholder = n.text;
+  label.append(span, box);
+  $("giftFields").appendChild(label);
+});
+$("giftOpen").addEventListener("click", () => { $("giftStatus").textContent = ""; show($("giftDlg")); });
+
+$("giftMake").addEventListener("click", () => {
+  const notes = {};
+  document.querySelectorAll("#giftFields textarea").forEach(b => { notes[b.dataset.note] = b.value; });
+  const gift = cleanGift({ from: $("giftFrom").value, notes }, NOTES);
+  if (!gift) {
+    $("giftOut").hidden = true;
+    $("giftStatus").textContent = !$("giftFrom").value.trim() ? "Add your name so they know who the notes are from." : "Write at least one note.";
+    return;
+  }
+  $("giftLink").value = `${location.origin}${location.pathname}#gift=${encodeGift(gift)}`;
+  $("giftShare").hidden = !navigator.share;
+  $("giftOut").hidden = false;
+  $("giftStatus").textContent = `Link ready with ${Object.keys(gift.notes).length} of ${NOTES.length} notes. Anyone with the link can read them.`;
+});
+$("giftCopy").addEventListener("click", async () => {
+  const input = $("giftLink");
+  let ok = false;
+  try { await navigator.clipboard.writeText(input.value); ok = true; }
+  catch (e) { input.select(); try { ok = document.execCommand("copy"); } catch (e2) { ok = false; } }
+  $("giftStatus").textContent = ok ? "Copied. Send it to your friend." : "Select the link and copy it.";
+});
+$("giftShare").addEventListener("click", () => {
+  navigator.share({ title: "Study Pet", text: `${$("giftFrom").value.trim()} wrote you some notes. Study with your pet to unlock them.`, url: $("giftLink").value })
+    .catch(() => {});   // closing the share sheet isn't an error
+});
+
+// Receiving: open the app with #gift=... A brand-new pet takes the notes right
+// away; a pet with progress (or other notes) asks first.
+let pendingGift = null;
+function useGift(gift) {
+  applyGift(state, gift); save(); notesSig = "";
+  say(`${gift.from} left you ${Object.keys(gift.notes).length === 1 ? "a note" : Object.keys(gift.notes).length + " notes"}. They unlock as you study.`);
+  render();
+}
+function receiveGift() {
+  const m = location.hash.match(/^#gift=([\w-]+)/);
+  if (!m) return;
+  history.replaceState(null, "", location.pathname + location.search);   // keep the notes out of bookmarks and history
+  let gift;
+  try { gift = decodeGift(m[1], NOTES); } catch (e) { say(e.message); return; }
+  if (testMode) { say("Leave test mode (press T), then open the notes link again."); return; }
+  if (sameGift(state.gift, gift)) return;
+  if (state.sessions === 0 && !state.gift) { useGift(gift); return; }
+  pendingGift = gift;
+  $("giftGotTitle").textContent = `${gift.from} wrote you notes`;
+  $("giftGotText").textContent = state.gift
+    ? `They'll replace the notes from ${state.gift.from}. Notes you've already unlocked show the new words.`
+    : "They'll replace your pet's notes. Notes you've already unlocked show the new words.";
+  show($("giftGotDlg"));
+}
+$("giftAccept").addEventListener("click", () => {
+  if (pendingGift) useGift(pendingGift);
+  pendingGift = null; hide($("giftGotDlg"));
+});
+window.addEventListener("hashchange", receiveGift);
+
+$("giftPasteOpen").addEventListener("click", () => {
+  $("giftPasteInput").value = ""; $("giftPasteStatus").textContent = "";
+  show($("giftPasteDlg")); $("giftPasteInput").focus();
+});
+$("giftPasteGo").addEventListener("click", () => {
+  const m = $("giftPasteInput").value.match(/#gift=([\w-]+)/);
+  if (!m) { $("giftPasteStatus").textContent = "That isn't a notes link. It should contain #gift="; return; }
+  hide($("giftPasteDlg"));
+  location.hash = "gift=" + m[1];   // the hashchange listener takes it from here
+});
+
 /* ---------- Installing ---------- */
 registerServiceWorker();
 watchInstall(can => { $("installBtn").hidden = !can; });
@@ -425,4 +507,5 @@ save();
 protectProgress();
 setInterval(tick, 100);
 tick();
+receiveGift();
 if (!state.name) openName();

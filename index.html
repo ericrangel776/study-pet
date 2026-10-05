@@ -67,6 +67,10 @@
     <section class="notes">
       <h2 id="notesTitle">Notes</h2>
       <ul id="notesList"></ul>
+      <div class="notes-links">
+        <button class="link" id="giftOpen">Write notes for a friend</button>
+        <button class="link" id="giftPasteOpen">Paste a notes link</button>
+      </div>
     </section>
 
     <section class="settings">
@@ -126,6 +130,46 @@
     <button class="link" data-close>Cancel</button>
   </div>
   <p class="msg-line" id="restoreStatus" aria-live="polite"></p>
+</dialog>
+
+<dialog id="giftDlg" aria-labelledby="giftDlgTitle">
+  <h2 id="giftDlgTitle">Write notes for a friend</h2>
+  <p>Their pet unlocks your notes as they study. Fill in as many as you like; blank ones use the pet's own words.
+     Your notes travel inside the link, not through any server.</p>
+  <label class="field"><span>Your name</span><input id="giftFrom" autocomplete="name"></label>
+  <div id="giftFields"></div>
+  <div class="row">
+    <button class="primary" id="giftMake">Create link</button>
+    <button class="link" data-close>Close</button>
+  </div>
+  <div class="gift-out" id="giftOut" hidden>
+    <input id="giftLink" readonly aria-label="Link for your friend">
+    <div class="row">
+      <button class="primary" id="giftShare" hidden>Share</button>
+      <button class="secondary" id="giftCopy">Copy link</button>
+    </div>
+  </div>
+  <p class="msg-line" id="giftStatus" aria-live="polite"></p>
+</dialog>
+
+<dialog id="giftPasteDlg" aria-labelledby="giftPasteTitle">
+  <h2 id="giftPasteTitle">Paste a notes link</h2>
+  <p>If a friend's link opened somewhere else (on iPhone, links open in Safari, not the Home Screen app), paste it here.</p>
+  <input id="giftPasteInput" autocomplete="off" aria-label="Notes link">
+  <div class="row">
+    <button class="primary" id="giftPasteGo">Use link</button>
+    <button class="link" data-close>Cancel</button>
+  </div>
+  <p class="msg-line" id="giftPasteStatus" aria-live="polite"></p>
+</dialog>
+
+<dialog id="giftGotDlg" aria-labelledby="giftGotTitle">
+  <h2 id="giftGotTitle">You got notes</h2>
+  <p id="giftGotText"></p>
+  <div class="row">
+    <button class="primary" id="giftAccept">Use these notes</button>
+    <button class="link" data-close>Not now</button>
+  </div>
 </dialog>
 
 <script type="module" src="src/ui.js"></script>
