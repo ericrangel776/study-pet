@@ -3,6 +3,7 @@
 // so the same code can run in the browser, in tests, or later on a server.
 
 export const SAVE_VERSION = 3;
+export const USER_NAME_MAX = 24;
 export const HEART_MS = 12 * 3600e3;   // one heart fades every 12 hours
 export const MAX_HEARTS = 4;
 export const SHORT_BREAK = 5;
@@ -41,7 +42,7 @@ export function createState(now) {
     hearts: 3, heartsAt: now,
     streak: 0, lastDay: null, lastStudyAt: null,
     bestStreak: 0, firstStudyAt: null, grownAt: null,   // for the certificate
-    certName: "", certSeen: false,
+    userName: "", certSeen: false,     // userName: the person, used across the app and on the certificate
     length: 25, active: null, onBreak: null,
     notes: {},
     invite: null,          // extras from the person who invited them (see Invites below)
@@ -63,7 +64,10 @@ export function migrate(raw, now) {
   s.bestStreak = Math.max(Number.isFinite(raw.bestStreak) ? raw.bestStreak : 0, Number.isFinite(raw.streak) ? raw.streak : 0);
   if (!Number.isFinite(s.firstStudyAt)) s.firstStudyAt = null;
   if (!Number.isFinite(s.grownAt)) s.grownAt = s.sessions >= STAGES[STAGES.length - 1].at ? (s.lastStudyAt || now) : null;
-  s.certName = typeof raw.certName === "string" ? raw.certName.slice(0, 40) : "";
+  // Older saves kept a name only on the certificate, or got one from an invite.
+  const userName = [raw.userName, raw.certName, raw.invite && raw.invite.to].find(v => typeof v === "string" && v.trim());
+  s.userName = userName ? userName.trim().slice(0, USER_NAME_MAX) : "";
+  delete s.certName;
   s.days = {};
   if (raw.days && typeof raw.days === "object")
     for (const [k, v] of Object.entries(raw.days)) if (Number.isFinite(v) && v > 0) s.days[k] = v;
@@ -261,11 +265,11 @@ export function decodeInvite(code, notesList) {
 export const sameInvite = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
 // Accept an invite. Unlocked notes that gained a P.S. show as new again, and
-// the certificate gets the invited person's name if it doesn't have one.
+// the invited person's name is filled in if they haven't given one.
 export function applyInvite(s, inv) {
   s.invite = inv;
   Object.keys(inv.ps).forEach(id => { if (s.notes[id]) s.notes[id].read = false; });
-  if (!s.certName && inv.to) s.certName = inv.to;
+  if (!s.userName && inv.to) s.userName = inv.to;
 }
 export const notePS = (s, n) => (s.invite && s.invite.ps[n.id]) || "";
 

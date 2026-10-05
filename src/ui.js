@@ -175,7 +175,7 @@ function renderSeal() {
 const longDate = t => new Date(t).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
 function openCertificate() {
   const c = certificate(state, NOTES), pet = nameOr();
-  $("certName").value = state.certName;
+  $("certName").textContent = state.userName;
   $("certFor").textContent = c.since
     ? `for raising ${pet} from an egg to a grown-up, one focus session at a time, from ${longDate(c.since)} to ${longDate(c.grownAt)}.`
     : `for raising ${pet} from an egg to a grown-up, one focus session at a time. Fully grown on ${longDate(c.grownAt)}.`;
@@ -196,11 +196,9 @@ From ${state.invite.from}` : "";
     hatchAt: -1e12, growAt: -1e12, patAt: -1e12, rm: true, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), portrait: true });
   state.certSeen = true; save();
   show($("certDlg"));
-  if (!state.certName) $("certName").focus();
   render();
 }
 $("sealOpen").addEventListener("click", openCertificate);
-$("certName").addEventListener("input", e => { state.certName = e.target.value.trim(); save(); });
 $("certPrint").addEventListener("click", () => window.print());
 
 // Safari erases a website's data after 7 days without a visit unless it's on
@@ -301,14 +299,31 @@ function openNote(n) {
 }
 
 const nameDlg = $("nameDlg");
-function openName() { $("nameInput").value = state.name; show(nameDlg); $("nameInput").focus(); }
+// Asks for the person's name and the pet's name: on a first visit, for older saves
+// without a person's name, and from "Change names".
+function openName() {
+  const first = !state.name || !state.userName;
+  $("nameTitle").textContent = first ? "Welcome to Study Pet" : "Change names";
+  $("nameLead").hidden = !first;
+  $("nameSave").textContent = first ? "Let's go" : "Save";
+  $("userInput").value = state.userName;
+  $("nameInput").value = state.name;
+  $("nameStatus").textContent = "";
+  show(nameDlg);
+  (state.userName ? $("nameInput") : $("userInput")).focus();
+}
 function saveName() {
+  const user = $("userInput").value.trim(), first = !state.userName;
+  if (!user) { $("nameStatus").textContent = "What should we call you?"; $("userInput").focus(); return; }
+  state.userName = user;
   state.name = $("nameInput").value.trim() || state.name || "Pip";
-  save(); hide(nameDlg); render();
+  save(); hide(nameDlg);
+  if (first) say(`Nice to meet you, ${user}! ${nameOr()} is ${stageIndex(state) === 0 ? "waiting in the egg" : "happy you're here"}.`);
+  render();
 }
 $("nameSave").addEventListener("click", saveName);
-$("nameInput").addEventListener("keydown", e => { if (e.key === "Enter") saveName(); });
-nameDlg.addEventListener("cancel", e => { if (!state.name) e.preventDefault(); });
+[$("userInput"), $("nameInput")].forEach(i => i.addEventListener("keydown", e => { if (e.key === "Enter") saveName(); }));
+nameDlg.addEventListener("cancel", e => { if (!state.name || !state.userName) e.preventDefault(); });
 $("renameBtn").addEventListener("click", openName);
 
 /* ---------- Device buttons ---------- */
@@ -432,7 +447,8 @@ $("restoreGo").addEventListener("click", () => {
 
 $("resetBtn").addEventListener("click", () => {
   if (Date.now() < resetArmed) {
-    state = createState(Date.now()); save(); resetArmed = 0; notesSig = ""; syncSettings(); say(""); render(); openName();
+    const userName = state.userName;   // starting over is a new pet, not a new person
+    state = createState(Date.now()); state.userName = userName; save(); resetArmed = 0; notesSig = ""; syncSettings(); say(""); render(); openName();
   } else { resetArmed = Date.now() + 4000; render(); }
 });
 
@@ -499,7 +515,7 @@ $("invAccessories").addEventListener("change", drawInvitePreview);
 
 function openInvite() {
   $("invStatus").textContent = "";
-  if (!$("invFrom").value && state.invite && state.invite.to) $("invFrom").value = state.invite.to;   // pass it on
+  if (!$("invFrom").value) $("invFrom").value = state.userName;
   drawInvitePreview();
   show($("inviteDlg"));
 }
@@ -572,7 +588,7 @@ $("invAccept").addEventListener("click", () => {
   if (pendingInvite) useInvite(pendingInvite);
   pendingInvite = null;
 });
-$("welcomeDlg").addEventListener("close", () => { if (!state.name) openName(); });
+$("welcomeDlg").addEventListener("close", () => { if (!state.name || !state.userName) openName(); });
 window.addEventListener("hashchange", receiveInvite);
 
 $("invPasteOpen").addEventListener("click", () => {
@@ -612,4 +628,7 @@ protectProgress();
 setInterval(tick, 100);
 tick();
 receiveInvite();
-if (!state.name && !$("welcomeDlg").open && !$("invAskDlg").open) openName();
+if (!$("welcomeDlg").open && !$("invAskDlg").open) {
+  if (!state.name || !state.userName) openName();
+  else if (!$("msg").textContent) say(`Hi, ${state.userName}! ${nameOr()} is ready when you are.`);
+}
