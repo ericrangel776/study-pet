@@ -142,3 +142,52 @@ dialog .gift-out[hidden]{display:none}
 dialog .gift-out input{font-size:14px;margin-bottom:10px}
 dialog .msg-line{font-size:14px;color:var(--muted);margin:12px 0 0;min-height:1.2em}
 @media (prefers-reduced-motion: reduce){.key .dot{transition:none}}
+
+/* Sealed certificate: the long-term goal in the Notes section */
+.seal{display:block;width:100%;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:12px 14px;margin:0 0 20px;text-align:left}
+.seal[hidden]{display:none}
+.seal-head{display:flex;gap:12px;align-items:center;margin-bottom:10px}
+.seal-head strong,.seal-open strong{display:block;font-weight:600}
+.seal-head span:not(.seal-badge),.seal-open strong + span{display:block;font-size:14px;color:var(--muted)}
+.seal-badge{flex:none;width:34px;height:34px;border-radius:50%;background:var(--bar);
+  box-shadow:inset 0 0 0 4px var(--panel),inset 0 0 0 6px var(--bar)}
+.seal-badge.open{background:var(--btn);box-shadow:inset 0 0 0 4px var(--panel),inset 0 0 0 6px var(--btn)}
+.meter{height:8px;border-radius:999px;background:var(--chip);overflow:hidden}
+.meter span{display:block;height:100%;background:var(--bar);border-radius:999px}
+.seal-count{display:block;font-size:13px;color:var(--muted);margin-top:6px}
+.seal-open{display:flex;align-items:center;gap:12px;cursor:pointer;font:inherit;color:inherit}
+.seal-open > span:nth-child(2){flex:1}
+.seal-open .new{font-size:13px;background:var(--btn);color:#2A2440;border-radius:999px;padding:1px 9px}
+.seal-open .new[hidden]{display:none}
+
+/* The certificate: cream paper in both themes, so it looks the same printed */
+#certDlg{width:min(560px,calc(100% - 32px))}
+.cert{--paper:#FFFDF6;--paper-ink:#2A2440;--paper-muted:#6B6385;--paper-rule:#8F7FD0;
+  background:var(--paper);color:var(--paper-ink);border:3px double var(--paper-rule);border-radius:14px;
+  padding:26px 22px 22px;text-align:center;margin-bottom:16px}
+.cert-kicker{font-family:"Silkscreen","Courier New",monospace;font-size:12px;letter-spacing:.12em;color:var(--paper-muted);margin:0 0 6px}
+#certDlg .cert h2{font-size:28px;line-height:1.15;margin:0 0 14px}
+#certDlg .cert p{color:var(--paper-ink)}
+#certDlg .cert-small{font-size:14px;color:var(--paper-muted);margin:0 0 4px}
+#certDlg input.cert-name{display:block;width:100%;text-align:center;font-size:26px;font-weight:600;color:var(--paper-ink);
+  background:transparent;border:0;border-bottom:2px solid var(--paper-rule);border-radius:0;padding:4px 0;margin:0 0 14px}
+#certDlg input.cert-name::placeholder{color:var(--paper-muted);font-weight:400}
+#certDlg .cert-for{font-size:16px;line-height:1.5;margin:0 0 16px}
+#certPet{display:block;width:128px;margin:0 auto 16px;image-rendering:pixelated;image-rendering:crisp-edges;background:#B9C79A;border-radius:8px}
+.cert-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0 0 16px}
+.cert-stats div{border-top:1px solid #E6E0F5;padding-top:8px}
+.cert-stats dt{font-size:13px;color:var(--paper-muted)}
+.cert-stats dd{margin:0;font-size:20px;font-weight:600}
+#certDlg .cert-msg{font-size:16px;font-style:italic;line-height:1.5;margin:0 0 16px}
+#certDlg .cert-msg[hidden]{display:none}
+#certDlg .cert-sign{font-size:15px;color:var(--paper-muted);margin:0}
+
+@media print{
+  body{background:#fff}
+  main,dialog:not(#certDlg){display:none !important}
+  #certDlg{position:static;box-shadow:none;max-height:none;overflow:visible;width:100%;max-width:none;padding:0;background:#fff;margin:0}
+  #certDlg::backdrop{display:none}
+  .no-print{display:none !important}
+  #certDlg *{outline:none !important}
+  .cert{border-width:4px;padding:48px 40px;margin:0;break-inside:avoid}
+}

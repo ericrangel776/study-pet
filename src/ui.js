@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { NOTES, LENGTHS, DOG_NAMES } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, GIFT_LIMITS, cleanGift, encodeGift, decodeGift, sameGift, applyGift, noteText, isPuppy } from "./engine.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, GIFT_LIMITS, cleanGift, encodeGift, decodeGift, sameGift, applyGift, noteText, isPuppy, certificate } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing, wakeLockSupported, keepAwake } from "./alerts.js";
@@ -62,7 +62,10 @@ function handleEvent(ev) {
   if (ev.type === "focusDone") {
     let text;
     if (ev.grewTo === 1) { hatchAt = Date.now(); text = `${nameOr()} hatched!`; }
-    else if (ev.grewTo) { growAt = Date.now(); text = `${nameOr()} grew into a ${STAGES[ev.grewTo].name}!`; }
+    else if (ev.grewTo) {
+      growAt = Date.now(); text = `${nameOr()} grew into a ${STAGES[ev.grewTo].name}!`;
+      if (ev.grewTo === STAGES.length - 1) text += " Your certificate is unsealed. Find it under Notes.";
+    }
     else text = `Session done. ${nameOr()} had a snack.`;
     if (ev.notes.length) text += ` You unlocked ${ev.notes.length === 1 ? "a note" : ev.notes.length + " notes"} from ${notesFrom()}.`;
     if (!ev.breakSkipped) text += ` Enjoy a ${ev.breakMinutes}-minute break.`;
@@ -146,7 +149,49 @@ function render() {
   $("testTag").hidden = !testMode;
   renderNotes();
   renderWeek(now);
+  renderSeal();
 }
+
+/* ---------- Certificate ---------- */
+// Sealed card with progress until the pet is fully grown; then a button that opens it.
+function renderSeal() {
+  const c = certificate(state, NOTES);
+  $("sealLocked").hidden = c.earned;
+  $("sealOpen").hidden = !c.earned;
+  if (c.earned) { $("sealNew").hidden = state.certSeen; return; }
+  $("sealHint").textContent = `Opens when ${nameOr()} is fully grown`;
+  $("sealFill").style.width = (c.progress / c.goal * 100) + "%";
+  $("sealMeter").setAttribute("aria-valuemax", c.goal);
+  $("sealMeter").setAttribute("aria-valuenow", c.progress);
+  $("sealCount").textContent = `${c.progress} of ${c.goal} sessions`;
+}
+
+const longDate = t => new Date(t).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+function openCertificate() {
+  const c = certificate(state, NOTES), pet = nameOr();
+  $("certName").value = state.certName;
+  $("certFor").textContent = c.since
+    ? `for raising ${pet} from an egg to a grown-up, one focus session at a time, from ${longDate(c.since)} to ${longDate(c.grownAt)}.`
+    : `for raising ${pet} from an egg to a grown-up, one focus session at a time. Fully grown on ${longDate(c.grownAt)}.`;
+  const stats = [["Focus sessions", c.sessions], ["Focus time", fmtMinutes(c.minutes)],
+                 ["Longest streak", `${c.bestStreak} ${c.bestStreak === 1 ? "day" : "days"}`], ["Notes unlocked", `${c.notes} of ${c.totalNotes}`]];
+  $("certStats").innerHTML = "";
+  stats.forEach(([label, value]) => {
+    const div = document.createElement("div"), dt = document.createElement("dt"), dd = document.createElement("dd");
+    dt.textContent = label; dd.textContent = value;
+    div.append(dt, dd); $("certStats").appendChild(div);
+  });
+  $("certSigned").textContent = `Signed, ${pet}${isPuppy(state, DOG_NAMES) ? " (woof!)" : ""}`;
+  draw($("certPet").getContext("2d"), { now: 1300, mood: "happy", stage: STAGES.length - 1, hearts: 0, unread: 0,
+    hatchAt: -1e12, growAt: -1e12, patAt: -1e12, rm: true, dog: isPuppy(state, DOG_NAMES), portrait: true });
+  state.certSeen = true; save();
+  show($("certDlg"));
+  if (!state.certName) $("certName").focus();
+  render();
+}
+$("sealOpen").addEventListener("click", openCertificate);
+$("certName").addEventListener("input", e => { state.certName = e.target.value.trim(); save(); });
+$("certPrint").addEventListener("click", () => window.print());
 
 // Safari erases a website's data after 7 days without a visit unless it's on
 // the Home Screen, so iPhone users in the browser always see that risk.
