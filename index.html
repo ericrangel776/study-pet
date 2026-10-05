@@ -1,0 +1,113 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Study Pet</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=Silkscreen&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="styles.css">
+</head>
+<body>
+<main>
+  <div class="device-wrap">
+    <div class="device">
+      <div class="bezel">
+        <div class="lcd">
+          <canvas id="screen" width="64" height="48" role="img" aria-label="Your pet"></canvas>
+          <div class="lcd-status" aria-live="polite">
+            <div class="big" id="big"></div>
+            <div class="small" id="small"></div>
+          </div>
+        </div>
+      </div>
+      <div class="keys">
+        <button class="key" id="keyFocus"><span class="dot"></span><span class="lbl" id="focusLbl">Focus</span></button>
+        <button class="key" id="keyLength"><span class="dot"></span><span class="lbl">Length</span></button>
+        <button class="key" id="keyPat"><span class="dot"></span><span class="lbl">Pat</span></button>
+      </div>
+    </div>
+  </div>
+
+  <section class="panel">
+    <h1 id="petName">Study Pet</h1>
+    <p class="lead">Finish a focus session to feed your pet, then take a short break together. Skip a few days and it gets sleepy, but it never goes away.</p>
+
+    <fieldset class="lengths">
+      <legend>Session length</legend>
+      <div class="chips" id="chips"></div>
+    </fieldset>
+
+    <dl class="stats">
+      <div><dt>Day streak</dt><dd id="stStreak">0</dd></div>
+      <div><dt>Sessions</dt><dd id="stSessions">0</dd></div>
+      <div><dt>Focus time</dt><dd id="stTime">0m</dd></div>
+    </dl>
+    <p class="next" id="next"></p>
+    <p class="msg" id="msg" aria-live="polite"></p>
+
+    <section class="notes">
+      <h2 id="notesTitle">Notes</h2>
+      <ul id="notesList"></ul>
+    </section>
+
+    <section class="settings">
+      <h2>Settings</h2>
+      <label class="switch"><input type="checkbox" id="soundToggle"><span>Sound when a timer ends</span></label>
+      <label class="switch" id="notifyRow"><input type="checkbox" id="notifyToggle"><span>Desktop alert when a timer ends</span></label>
+      <div class="backup-row">
+        <button class="secondary" id="backupBtn">Back up progress</button>
+        <button class="secondary" id="restoreBtn">Restore</button>
+      </div>
+      <p class="hint" id="backupHint"></p>
+    </section>
+
+    <div class="tools">
+      <button class="link" id="renameBtn">Rename</button>
+      <button class="link" id="resetBtn">Start over</button>
+      <span class="tag" id="testTag" hidden>Test mode: seconds, not minutes</span>
+    </div>
+  </section>
+</main>
+
+<dialog id="nameDlg">
+  <h2>Name your pet</h2>
+  <p>It hatches after your first focus session.</p>
+  <input id="nameInput" maxlength="16" autocomplete="off" placeholder="Pip">
+  <button class="primary" id="nameSave">Save name</button>
+</dialog>
+
+<dialog id="noteDlg">
+  <h2 id="noteTitle">A note</h2>
+  <p id="noteText"></p>
+  <button class="primary" data-close>Close</button>
+</dialog>
+
+<dialog id="backupDlg">
+  <h2>Back up progress</h2>
+  <p>Save this so your pet is safe even if the browser data gets cleared.</p>
+  <textarea id="backupCode" readonly aria-label="Backup code"></textarea>
+  <div class="row">
+    <button class="primary" id="dlBtn" hidden>Download file</button>
+    <button class="secondary" id="copyBtn">Copy code</button>
+    <button class="link" data-close>Close</button>
+  </div>
+  <p class="msg-line" id="backupStatus" aria-live="polite"></p>
+</dialog>
+
+<dialog id="restoreDlg">
+  <h2>Restore progress</h2>
+  <p>Choose a backup file or paste a backup code. This replaces the current pet.</p>
+  <input type="file" class="file" id="restoreFile" accept=".json,application/json" aria-label="Backup file">
+  <textarea id="restoreCode" aria-label="Backup code" placeholder="Paste backup code here"></textarea>
+  <div class="row">
+    <button class="primary" id="restoreGo">Replace my progress</button>
+    <button class="link" data-close>Cancel</button>
+  </div>
+  <p class="msg-line" id="restoreStatus" aria-live="polite"></p>
+</dialog>
+
+<script type="module" src="src/ui.js"></script>
+</body>
+</html>
