@@ -175,6 +175,13 @@ export function unreadNotes(s, notesList) {
 }
 
 /* ---------- Backup ---------- */
+// Nudge for a backup when there's progress to lose, nothing promises to keep it
+// (`kept`: the browser granted persistent storage, or the app is installed),
+// and the last backup is a week old or missing.
+export function needsBackup(s, now, kept) {
+  if (s.sessions === 0 || kept) return false;
+  return !s.settings.lastBackupAt || daysAgo(s.settings.lastBackupAt, now) >= 7;
+}
 export function exportBackup(s, now) {
   return JSON.stringify({ app: "study-pet", exportedAt: new Date(now).toISOString(), data: s }, null, 2);
 }
