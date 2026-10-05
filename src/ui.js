@@ -5,6 +5,7 @@ import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, s
 import { localStore } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing } from "./alerts.js";
+import { registerServiceWorker, watchInstall, promptInstall, isIOS, isInstalled } from "./pwa.js";
 
 const $ = id => document.getElementById(id);
 const store = localStore;
@@ -299,6 +300,18 @@ document.addEventListener("keydown", e => {
     if (window.claude && typeof window.claude.use === "function") downloads = await window.claude.use("downloads");
   } catch (e) { downloads = null; }
 })();
+
+/* ---------- Installing ---------- */
+registerServiceWorker();
+watchInstall(can => { $("installBtn").hidden = !can; });
+$("installBtn").addEventListener("click", async () => {
+  if (await promptInstall()) say(`${nameOr()} has a home on your device now.`);
+  $("installBtn").hidden = true;
+});
+if (isIOS() && !isInstalled()) {
+  $("installHint").textContent = "To install on iPhone or iPad, tap Share, then Add to Home Screen.";
+  $("installHint").hidden = false;
+}
 
 /* ---------- Main loop ---------- */
 function tick() {
