@@ -178,6 +178,37 @@ test("a backup restores the same progress", () => {
   assert.equal(restored.onBreak, null);
 });
 
+test("history records minutes on the day each session ended", () => {
+  const s = E.createState(at(2026, 10, 1));
+  finishSession(s, at(2026, 10, 1, 10), 25);
+  finishSession(s, at(2026, 10, 1, 15), 45);
+  finishSession(s, at(2026, 10, 2, 0, 10), 15);   // started Oct 1, ended after midnight
+  assert.deepEqual(s.days, { "2026-10-1": 70, "2026-10-2": 15 });
+});
+
+test("the last week is 7 calendar days ending today, even across a clock change", () => {
+  const s = E.createState(at(2026, 11, 1));
+  finishSession(s, at(2026, 10, 31, 20), 25);
+  finishSession(s, at(2026, 11, 3, 9), 60);
+  const week = E.lastWeek(s, at(2026, 11, 3, 0, 30));    // clocks fell back on Nov 1
+  assert.deepEqual(week.map(d => d.key), ["2026-10-28", "2026-10-29", "2026-10-30", "2026-10-31", "2026-11-1", "2026-11-2", "2026-11-3"]);
+  assert.deepEqual(week.map(d => d.minutes), [0, 0, 0, 25, 0, 0, 60]);
+});
+
+test("older saves get an empty history, and bad history entries are dropped", () => {
+  const v2 = { version: 2, sessions: 3, minutes: 75, hearts: 2, heartsAt: 1 };
+  assert.deepEqual(E.migrate(v2, at(2026, 10, 5)).days, {});
+  const messy = { ...v2, days: { "2026-10-4": 25, "2026-10-5": "lots", "2026-10-6": -5 } };
+  assert.deepEqual(E.migrate(messy, at(2026, 10, 5)).days, { "2026-10-4": 25 });
+});
+
+test("history survives a backup and restore", () => {
+  const s = E.createState(at(2026, 10, 1));
+  finishSession(s, at(2026, 10, 1, 10));
+  const restored = E.importBackup(E.exportBackup(s, at(2026, 10, 1, 11)), at(2026, 10, 2));
+  assert.deepEqual(restored.days, s.days);
+});
+
 test("days ago counts calendar days, not 24-hour periods", () => {
   assert.equal(E.daysAgo(at(2026, 10, 5, 9), at(2026, 10, 5, 22)), 0);
   assert.equal(E.daysAgo(at(2026, 10, 4, 23), at(2026, 10, 5, 9)), 1);
