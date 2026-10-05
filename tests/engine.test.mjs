@@ -338,6 +338,43 @@ test("saves from before the certificate get sensible values", () => {
   assert.equal(young.grownAt, null);
 });
 
+test("the same seed always grows the same pet", () => {
+  assert.deepEqual(E.petLook({ seed: 12345 }), E.petLook({ seed: 12345 }));
+  const a = E.createState(0, () => 0.1), b = E.createState(0, () => 0.1);
+  assert.equal(a.seed, b.seed);
+});
+
+test("pets come out in every variety, and differ from each other", () => {
+  const seen = Object.fromEntries(Object.keys(E.TRAITS).map(k => [k, new Set()]));
+  const looks = new Set();
+  for (let seed = 1; seed <= 400; seed++) {
+    const look = E.petLook({ seed: seed * 2654435761 >>> 0 });
+    for (const [k, v] of Object.entries(look)) seen[k].add(v);
+    looks.add(JSON.stringify(look));
+  }
+  for (const [k, options] of Object.entries(E.TRAITS)) assert.equal(seen[k].size, options.length, `every ${k} shows up`);
+  assert.ok(looks.size > 250, `${looks.size} different pets out of 400`);
+});
+
+test("older pets get a look once, and keep it", () => {
+  const old = E.migrate({ version: 3, sessions: 5, minutes: 125, hearts: 2, heartsAt: 1 }, 0);
+  assert.ok(Number.isInteger(old.seed));
+  assert.equal(E.migrate(JSON.parse(JSON.stringify(old)), 0).seed, old.seed);
+});
+
+test("each stage has words for what's new, and the certificate describes the whole pet", () => {
+  const look = { shape: "wide", marks: "spots", ears: "bunny", tail: "curl", topper: "star" };
+  assert.equal(E.newFeature(look, 1, false), "a spotted chubby one");
+  assert.equal(E.newFeature(look, 2, false), "long bunny ears");
+  assert.equal(E.newFeature(look, 2, true), "floppy ears");
+  assert.equal(E.newFeature(look, 3, false), "a curly tail");
+  assert.equal(E.newFeature(look, 4, false), "a star on top");
+  assert.equal(E.newFeature({ ...look, tail: "none" }, 3, false), "");
+  assert.equal(E.newFeature({ ...look, marks: "belly" }, 1, false), "a chubby one with a belly patch");
+  assert.equal(E.describeLook(look, false), "A chubby, spotted pet with long bunny ears, a curly tail and a star on top.");
+  assert.equal(E.describeLook({ ...look, marks: "patch", tail: "none" }, true), "A chubby puppy with an eye patch, floppy ears and a star on top.");
+});
+
 test("days ago counts calendar days, not 24-hour periods", () => {
   assert.equal(E.daysAgo(at(2026, 10, 5, 9), at(2026, 10, 5, 22)), 0);
   assert.equal(E.daysAgo(at(2026, 10, 4, 23), at(2026, 10, 5, 9)), 1);

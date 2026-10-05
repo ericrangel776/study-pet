@@ -40,7 +40,6 @@ function paintMask(m, fill, dx = 0, dy = 0) {
 /* ---------- Sprites ---------- */
 const EYES = { open: ["##", "##"], blink: ["##"], down: ["##"], closed: [".##.", "#..#"], joy: [".#.", "#.#"] };
 const MOUTHS = { smile: ["#..#", ".##."], open: [".##.", "#..#", ".##."], flat: ["##"], small: ["##"], grin: ["#....#", ".####."] };
-const SPROUT = ["..##", ".#.#", "#.#.", ".#.."];
 const HEART = [".#.#.", "#####", ".###.", "..#.."];
 const ENVELOPE = ["#######", "##...##", "#.#.#.#", "#..#..#", "#######"];
 const BOOK = [
@@ -52,20 +51,65 @@ const ZED = ["###", "..#", ".#.", "#..", "###"];
 const SPARK = [".#.", "###", ".#."];
 
 /* ---------- The pet ---------- */
+// How a pet looks comes from its traits (see petLook in engine.js). Without
+// traits it gets the original look: round, plain, pointy ears, no tail, a sprout.
+const DEFAULT_LOOK = { shape: "round", marks: "plain", ears: "pointy", tail: "none", topper: "sprout" };
 const SIZES = [null, [9, 7.5], [10, 9], [10.5, 10.5], [11.5, 11.5]];   // body radii per stage
-function petParts(st, x, ground, squash, dog) {
-  const rx = SIZES[st][0] + squash, ry = SIZES[st][1] - squash;
+const SHAPES = { round: [1, 1], wide: [1.12, .93], tall: [.9, 1.1] };   // width and height multipliers
+function petParts(st, x, ground, squash, dog, look) {
+  const [mw, mh] = SHAPES[look.shape];
+  const rx = SIZES[st][0] * mw + squash, ry = SIZES[st][1] * mh - squash;
   const cy = ground - ry - (st >= 2 ? 1.5 : 0);
   const parts = [{ x, y: cy, rx, ry }];
   if (st >= 2) {
-    if (!dog) parts.push({ x: x - rx * .55, y: cy - ry + 1.5, rx: 2.6, ry: 4 }, { x: x + rx * .55, y: cy - ry + 1.5, rx: 2.6, ry: 4 });   // ears
+    if (!dog) parts.push(...earParts(look.ears, x, cy, rx, ry));
     parts.push({ x: x - rx * .45, y: cy + ry - .5, rx: 3, ry: 2.2 }, { x: x + rx * .45, y: cy + ry - .5, rx: 3, ry: 2.2 });    // feet
   }
-  if (st >= 3) parts.push({ x: x - rx - .3, y: cy + 2, rx: 2.8, ry: 2 }, { x: x + rx + .3, y: cy + 2, rx: 2.8, ry: 2 });  // arms
+  if (st >= 3) {
+    parts.push({ x: x - rx - .3, y: cy + 2, rx: 2.8, ry: 2 }, { x: x + rx + .3, y: cy + 2, rx: 2.8, ry: 2 });  // arms
+    if (look.tail === "fluffy") parts.push({ x: x + rx + .8, y: cy + ry * .62, rx: 3.3, ry: 2.7 });
+  }
   return { parts, cy, rx, ry };
 }
+function earParts(kind, x, cy, rx, ry) {
+  const pair = (dx, y, erx, ery) => [{ x: x - dx, y, rx: erx, ry: ery }, { x: x + dx, y, rx: erx, ry: ery }];
+  if (kind === "pointy") return pair(rx * .55, cy - ry + 1.5, 2.6, 4);
+  if (kind === "round") return pair(rx * .62, cy - ry + 1.4, 2.9, 2.9);
+  if (kind === "bunny") return pair(rx * .42, cy - ry - 2.4, 1.9, 5.4);
+  return [];                                     // antennae are drawn as sprites
+}
+// Eye position, shared by the faces and the eye patch.
+const eyeAt = (rx, ry, cy, dog) => ({ ex: Math.max(3, Math.round(rx * .4)), ey: Math.round(cy - ry * (dog ? .25 : .2)) });
+
+// Markings sit inside the body outline, in the darker body color.
+function paintMarks(kind, mask, x, cy, rx, ry, dog) {
+  if (kind === "plain") return;
+  const { ex, ey } = eyeAt(rx, ry, cy, dog);
+  const SPOTS = [[-.58, .28], [.6, -.48], [.4, .55], [-.25, -.66], [-.62, -.3]];
+  const inMark = {
+    spots:   (px, py) => SPOTS.some(([dx, dy]) => Math.abs(px + .5 - (x + dx * rx)) <= 1 && Math.abs(py + .5 - (cy + dy * ry)) <= 1),
+    belly:   (px, py) => py > ey + (dog ? 7 : 5) && ((px + .5 - x) / (rx * .5)) ** 2 + ((py + .5 - (cy + ry * .66)) / (ry * .36)) ** 2 <= 1,
+    stripes: (px, py) => py + .5 < cy - ry * .5 && [-3, 0, 3].includes(Math.floor(px - x + .5)),
+    patch:   (px, py) => ((px + .5 - (x + ex)) / 3) ** 2 + ((py + .5 - (ey + .5)) / 2.7) ** 2 <= 1
+  }[kind];
+  cx.fillStyle = SPOT;
+  for (let y = 1; y < H - 1; y++) for (let px = 1; px < W - 1; px++) {
+    const i = y * W + px;
+    if (mask[i] && mask[i - 1] && mask[i + 1] && mask[i - W] && mask[i + W] && inMark(px, y)) cx.fillRect(px, y, 1, 1);
+  }
+}
+
+const ANTENNA_L = ["##..", "##..", "..#.", "..#."], ANTENNA_R = ["..##", "..##", ".#..", ".#.."];
+const TAILS = { curl: [".##.", "#..#", "#.#.", ".#.."], zigzag: ["#..", ".#.", "..#", ".#.", "#.."] };
+const TOPPERS = {
+  sprout: ["..##", ".#.#", "#.#.", ".#.."],
+  leaves: ["##...##", "#+#.#+#", ".##.##.", "...#..."],
+  star:   ["..#..", "..#..", "#####", ".###.", ".#.#."],
+  curl:   [".##.", "#..#", "...#", "..#."]
+};
+
 function drawFace(x, cy, rx, ry, face, blush) {
-  const ex = Math.max(3, Math.round(rx * .4)), ey = Math.round(cy - ry * .2);
+  const { ex, ey } = eyeAt(rx, ry, cy, false);
   const lower = (face.eyes === "blink" || face.eyes === "down") ? 1 : 0;
   spriteC(EYES[face.eyes], x - ex, ey + lower, INK);
   spriteC(EYES[face.eyes], x + ex, ey + lower, INK);
@@ -80,7 +124,7 @@ function drawDogEars(x, cy, rx, ry, st) {
   paintMask(makeMask([{ x: x - rx + er.rx * .2, y: ey, ...er }, { x: x + rx - er.rx * .2, y: ey, ...er }]), SPOT);
 }
 function drawDogFace(x, cy, rx, ry, face, blush) {
-  const ex = Math.max(3, Math.round(rx * .4)), ey = Math.round(cy - ry * .25);
+  const { ex, ey } = eyeAt(rx, ry, cy, true);
   const lower = (face.eyes === "blink" || face.eyes === "down") ? 1 : 0;
   spriteC(EYES[face.eyes], x - ex, ey + lower, INK);
   spriteC(EYES[face.eyes], x + ex, ey + lower, INK);
@@ -101,14 +145,20 @@ function sprite2(rows, x, y) {
 function drawAccessory(kind, x, cy, rx, ry) {
   const rows = ACCESSORY_SPRITES[kind], top = cy - ry;
   if (kind === "hat") sprite2(rows, x - 2, top - rows.length + 1);          // on top of the head
-  else if (kind === "bow") sprite2(rows, x + rx * .45 - 3, top - 1);         // off to one side, clear of the sprout
+  else if (kind === "bow") sprite2(rows, x + rx * .45 - 3, top - 1);         // off to one side, clear of the topper
   else sprite2(rows, x - rx * .4 - 2, top - 1);                              // tucked behind an ear
 }
 function drawPet(st, o) {
-  const P = petParts(st, o.x, o.ground, o.squash || 0, o.dog);
-  paintMask(makeMask(P.parts), BODY);
+  const look = o.look || DEFAULT_LOOK;
+  const P = petParts(st, o.x, o.ground, o.squash || 0, o.dog, look);
+  const top = P.cy - P.ry;
+  if (st >= 3 && TAILS[look.tail]) sprite(TAILS[look.tail], o.x + P.rx - .5, P.cy + P.ry * .38, INK);   // behind the body
+  const mask = makeMask(P.parts);
+  paintMask(mask, BODY);
+  paintMarks(look.marks, mask, o.x, P.cy, P.rx, P.ry, o.dog);
   if (o.dog) drawDogEars(o.x, P.cy, P.rx, P.ry, st);
-  if (st === 4 && o.accessory !== "hat") sprite(SPROUT, o.x - 2, P.cy - P.ry - 4, INK);
+  else if (st >= 2 && look.ears === "antennae") { sprite(ANTENNA_L, o.x - 6, top - 3, INK); sprite(ANTENNA_R, o.x + 2, top - 3, INK); }
+  if (st === 4 && o.accessory !== "hat") { const t = TOPPERS[look.topper]; sprite2(t, o.x - Math.floor(t[0].length / 2), top - t.length); }
   if (o.accessory) drawAccessory(o.accessory, o.x, P.cy, P.rx, P.ry);
   (o.dog ? drawDogFace : drawFace)(o.x, P.cy, P.rx, P.ry, o.face, o.blush);
   return P;
@@ -134,25 +184,25 @@ function drawSparkles(now) {
   [[12, 14], [50, 12], [16, 30], [48, 30]].forEach(([sx, sy], k) => { if ((k + on) % 2) sprite(SPARK, sx, sy, INK); });
 }
 
-function drawHatch(t, now, rm, dog, accessory) {
+function drawHatch(t, now, rm, dog, accessory, look) {
   const x = 32, cy = eggCY(), joy = { eyes: "joy", mouth: "grin" };
   if (t < 1500) {
     const shake = rm ? 0 : (Math.floor(t / 70) % 2 ? 1 : -1);
     drawEgg(x + shake, Math.min(17, Math.floor(t / 1500 * 18)));
   } else if (t < 2600) {
     const p = (t - 1500) / 1100;
-    drawPet(1, { x, ground: GROUND + Math.round((1 - p) * 8), face: joy, dog, accessory });
+    drawPet(1, { x, ground: GROUND + Math.round((1 - p) * 8), face: joy, dog, accessory, look });
     drawEgg(x, 0, (px, py) => py >= cy + crackDy(px + .5 - x));                                         // bottom shell
     drawEgg(x, 0, (px, py) => py < cy + crackDy(px + .5 - x), -Math.round(p * 6), -Math.round(p * 14)); // top shell flies off
   } else {
     const hop = rm ? 0 : Math.round(Math.abs(Math.sin((t - 2600) / 1000 * Math.PI * 2)) * 3);
-    drawPet(1, { x, ground: GROUND - hop, face: joy, blush: true, dog, accessory });
+    drawPet(1, { x, ground: GROUND - hop, face: joy, blush: true, dog, accessory, look });
     drawSparkles(now);
   }
 }
 
 /* ---------- One frame ---------- */
-// v = { now, mood, stage, hearts, unread, hatchAt, growAt, patAt, rm, dog, accessory, portrait }
+// v = { now, mood, stage, hearts, unread, hatchAt, growAt, patAt, rm, dog, accessory, look, portrait }
 export function draw(ctx, v) {
   cx = ctx;
   const { now, mood: m, stage: st, rm } = v;
@@ -160,7 +210,7 @@ export function draw(ctx, v) {
   if (!v.portrait) for (let k = 0; k < 4; k++) sprite(HEART, 2 + k * 6, 2, k < v.hearts ? INK : GHOST);   // portrait: just the pet, for the certificate
   if (v.unread && !v.portrait && Math.floor(now / 500) % 2) sprite(ENVELOPE, 55, 2, INK);
 
-  if (now - v.hatchAt < HATCH_MS) { drawHatch(now - v.hatchAt, now, rm, v.dog, v.accessory); return; }
+  if (now - v.hatchAt < HATCH_MS) { drawHatch(now - v.hatchAt, now, rm, v.dog, v.accessory, v.look); return; }
 
   const tp = now - v.patAt, patting = tp < PAT_MS, growing = now - v.growAt < GROW_MS;
   const beat = rm ? 0 : Math.floor(now / 600) % 2;
@@ -195,7 +245,7 @@ export function draw(ctx, v) {
     if (m === "hungry" && !rm && (now % 3000) < 240) x += Math.floor(now / 60) % 2 ? 1 : -1;
   }
 
-  const P = drawPet(st, { x, ground, squash, face, blush, dog: v.dog, accessory: v.accessory });
+  const P = drawPet(st, { x, ground, squash, face, blush, dog: v.dog, accessory: v.accessory, look: v.look });
 
   if (m === "break" && !patting) {
     const bounce = rm ? 6 : Math.round(Math.abs(Math.cos(now / 350)) * 12);

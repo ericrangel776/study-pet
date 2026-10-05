@@ -35,10 +35,11 @@ export function daysAgo(t, now) {
 }
 
 /* ---------- State ---------- */
-export function createState(now) {
+export function createState(now, random = Math.random) {
   return {
     version: SAVE_VERSION,
     name: "", sessions: 0, minutes: 0,
+    seed: newSeed(random),          // decides how this pet looks as it grows (see Looks)
     hearts: 3, heartsAt: now,
     streak: 0, lastDay: null, lastStudyAt: null,
     bestStreak: 0, firstStudyAt: null, grownAt: null,   // for the certificate
@@ -58,6 +59,7 @@ export function migrate(raw, now) {
   if (!raw || typeof raw !== "object") return createState(now);
   const s = Object.assign(createState(now), raw);
   s.notes = raw.notes && typeof raw.notes === "object" ? raw.notes : {};
+  if (!Number.isInteger(s.seed) || s.seed < 0) s.seed = newSeed();   // older pets get their own look once
   s.invite = cleanInvite(raw.invite);
   // Saves from before the certificate: the best streak is at least the current one,
   // and an already grown pet counts as grown at its last session.
@@ -102,6 +104,65 @@ export function mood(s, now) {
   if (h === 1) return "hungry";
   return "happy";
 }
+/* ---------- Looks ---------- */
+// Every pet gets a random seed when it's created. The seed picks one option per
+// trait, and each growth stage shows off a new trait, so no two pets grow up the
+// same way. The first option of each trait is the original look.
+export const TRAITS = {
+  shape:  ["round", "wide", "tall"],                         // from hatching
+  marks:  ["plain", "spots", "belly", "stripes", "patch"],   // from hatching
+  ears:   ["pointy", "round", "bunny", "antennae"],          // kid
+  tail:   ["none", "curl", "fluffy", "zigzag"],              // teen
+  topper: ["sprout", "leaves", "star", "curl"]               // grown-up
+};
+export const newSeed = (random = Math.random) => Math.floor(random() * 2 ** 32) >>> 0;
+
+// mulberry32: a tiny seeded random generator, so a seed always gives the same pet.
+function seeded(seed) {
+  let a = seed >>> 0;
+  return () => {
+    a = (a + 0x6D2B79F5) >>> 0;
+    let t = Math.imul(a ^ (a >>> 15), 1 | a);
+    t = (t + Math.imul(t ^ (t >>> 7), 61 | t)) ^ t;
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296;
+  };
+}
+export function petLook(s) {
+  const r = seeded(s.seed);
+  const look = {};
+  for (const [trait, options] of Object.entries(TRAITS)) look[trait] = options[Math.floor(r() * options.length)];
+  return look;
+}
+
+// Words for the growth messages and the certificate.
+const WORDS = {
+  shape:  { round: "round", wide: "chubby", tall: "tall" },
+  marks:  { plain: "", spots: "spotted", belly: "with a belly patch", stripes: "striped", patch: "with an eye patch" },
+  ears:   { pointy: "pointy ears", round: "round ears", bunny: "long bunny ears", antennae: "little antennae" },
+  tail:   { none: "", curl: "a curly tail", fluffy: "a fluffy tail", zigzag: "a zigzag tail" },
+  topper: { sprout: "a sprout on top", leaves: "two leaves on top", star: "a star on top", curl: "a curl on top" }
+};
+// What's new at a stage, as a short phrase ("long bunny ears"), or "" when there's nothing to show.
+export function newFeature(look, stage, puppy) {
+  if (stage === 1) {
+    const marks = WORDS.marks[look.marks];
+    const adj = marks && !marks.startsWith("with") ? `${marks} ` : "";
+    return `a ${adj}${WORDS.shape[look.shape]} ${puppy ? "puppy" : "one"}${marks.startsWith("with") ? " " + marks : ""}`;
+  }
+  if (stage === 2) return puppy ? "floppy ears" : WORDS.ears[look.ears];
+  if (stage === 3) return WORDS.tail[look.tail];
+  if (stage === 4) return WORDS.topper[look.topper];
+  return "";
+}
+// The whole pet in one sentence, for the certificate: "A chubby, spotted pet with long bunny ears and a curly tail."
+export function describeLook(look, puppy) {
+  const marks = WORDS.marks[look.marks];
+  const adjs = [WORDS.shape[look.shape], marks && !marks.startsWith("with") ? marks : ""].filter(Boolean).join(", ");
+  const parts = [marks.startsWith("with") ? marks.slice(5) : "", puppy ? "floppy ears" : WORDS.ears[look.ears], WORDS.tail[look.tail], WORDS.topper[look.topper]].filter(Boolean);
+  const list = parts.length > 1 ? parts.slice(0, -1).join(", ") + " and " + parts[parts.length - 1] : parts[0];
+  return `A ${adjs} ${puppy ? "puppy" : "pet"} with ${list}.`;
+}
+
 // A puppy only when the pet has one of the dog names.
 export function isPuppy(s, dogNames) {
   return dogNames.includes(s.name.trim().toLowerCase());
