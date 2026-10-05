@@ -487,15 +487,14 @@ function inviteFromForm() {
   document.querySelectorAll("#invPS textarea").forEach(b => { ps[b.dataset.note] = b.value; });
   return cleanInvite({
     from: $("invFrom").value, to: $("invTo").value, welcome: $("invWelcome").value, ps, letter: $("invLetter").value,
-    puppy: $("invPuppy").checked, accessory: document.querySelector('input[name="invAccessory"]:checked').value || null
+    accessory: document.querySelector('input[name="invAccessory"]:checked').value || null
   }, NOTES);
 }
 // Show the gifts on a teen pet as they're picked.
 function drawInvitePreview() {
   draw($("invPreview").getContext("2d"), { now: 1300, mood: "happy", stage: 2, hearts: 0, unread: 0, hatchAt: -1e12, growAt: -1e12, patAt: -1e12,
-    rm: true, portrait: true, dog: $("invPuppy").checked, accessory: document.querySelector('input[name="invAccessory"]:checked').value || null });
+    rm: true, portrait: true, accessory: document.querySelector('input[name="invAccessory"]:checked').value || null });
 }
-$("invPuppy").addEventListener("change", drawInvitePreview);
 $("invAccessories").addEventListener("change", drawInvitePreview);
 
 function openInvite() {
@@ -533,7 +532,6 @@ $("invShare").addEventListener("click", () => {
 // What an invite adds, in plain words, for the welcome card and the builder.
 function inviteExtras(inv) {
   const out = [], ps = Object.keys(inv.ps).length;
-  if (inv.puppy) out.push("Your pet is a puppy.");
   if (inv.accessory) out.push(`Your pet wears ${{ bow: "a bow", flower: "a flower", hat: "a party hat" }[inv.accessory]}.`);
   if (ps) out.push(`${inv.from} added a P.S. to ${ps === 1 ? "a milestone note" : ps + " milestone notes"}.`);
   if (inv.letter) out.push(`${inv.from} sealed a message inside your certificate.`);

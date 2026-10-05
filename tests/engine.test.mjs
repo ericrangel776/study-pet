@@ -224,7 +224,7 @@ test("a backup nudge appears only when progress could be lost", () => {
 
 const fullInvite = {
   from: "Eric", to: "Haylee", welcome: "Made this for you 💜", ps: { hatch: "¡Lo lograste! 🎉", streak3: "Proud of you." },
-  letter: "You did it. Dinner's on me.", puppy: true, accessory: "bow"
+  letter: "You did it. Dinner's on me.", accessory: "bow"
 };
 
 test("an invite survives the trip through a link, in any language", () => {
@@ -235,7 +235,7 @@ test("an invite survives the trip through a link, in any language", () => {
 
 test("a plain invite needs only the sender's name, and stays short", () => {
   const plain = E.cleanInvite({ from: "Sam" }, NOTES);
-  assert.deepEqual(plain, { from: "Sam", to: "", welcome: "", ps: {}, letter: "", puppy: false, accessory: null });
+  assert.deepEqual(plain, { from: "Sam", to: "", welcome: "", ps: {}, letter: "", accessory: null });
   const code = E.encodeInvite(plain);
   assert.ok(code.length < 40, `${code.length} characters`);
   assert.deepEqual(E.decodeInvite(code, NOTES), plain);
@@ -250,12 +250,12 @@ test("a damaged or nameless invite link is rejected", () => {
 
 test("invites are trimmed to the limits, and unknown extras are dropped", () => {
   const inv = E.cleanInvite({ from: "E".repeat(40), letter: "x".repeat(900), ps: { hatch: "y".repeat(300), made_up: "hi" },
-                              puppy: "yes", accessory: "crown" }, NOTES);
+                              puppy: true, accessory: "crown" }, NOTES);
   assert.equal(inv.from.length, E.INVITE_LIMITS.name);
   assert.equal(inv.letter.length, E.INVITE_LIMITS.letter);
   assert.equal(inv.ps.hatch.length, E.INVITE_LIMITS.ps);
   assert.equal(inv.ps.made_up, undefined);
-  assert.equal(inv.puppy, false);
+  assert.equal("puppy" in inv, false);                     // only the dog names make a puppy
   assert.equal(inv.accessory, null);
 });
 
@@ -273,7 +273,7 @@ test("accepting an invite adds P.S. lines, gifts and the certificate name", () =
   assert.equal(E.notePS(s, five), "");
   assert.equal(s.notes.hatch.read, false);                 // gained a P.S., so it's new again
   assert.equal(s.certName, "Haylee");
-  assert.equal(E.isPuppy(s, DOG_NAMES), true);
+  assert.equal(E.isPuppy(s, DOG_NAMES), false);             // invites never make a puppy
   assert.equal(E.accessory(s), "bow");
   const restored = E.importBackup(E.exportBackup(s, at(2026, 10, 1, 11)), at(2026, 10, 2));
   assert.deepEqual(restored.invite, s.invite);             // backups keep the invite

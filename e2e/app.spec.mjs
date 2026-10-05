@@ -155,12 +155,11 @@ test.describe("the sealed certificate", () => {
 
 test.describe("invites", () => {
   // Build an invite in one browser, then open it in a fresh one, like a friend would.
-  async function buildInvite(page, { from, to, welcome, puppy, accessory, ps = {}, letter } = {}) {
+  async function buildInvite(page, { from, to, welcome, accessory, ps = {}, letter } = {}) {
     await page.locator("#invOpen").click();
     if (from !== undefined) await page.locator("#invFrom").fill(from);
     if (to) await page.locator("#invTo").fill(to);
     if (welcome) await page.locator("#invWelcome").fill(welcome);
-    if (puppy) await page.locator("#invPuppy").check();
     if (accessory) await page.locator("#invAccessories").getByRole("radio", { name: accessory }).check();
     if (Object.keys(ps).length) {
       await page.locator(".ps-block summary").click();
@@ -174,9 +173,9 @@ test.describe("invites", () => {
 
   test("a full invite welcomes a new friend and follows them to the certificate", async ({ page, browser }) => {
     await open(page, { save: petSave() });
-    const link = await buildInvite(page, { from: "Eric", to: "Haylee", welcome: "Made this for you 💜", puppy: true, accessory: "Bow",
+    const link = await buildInvite(page, { from: "Eric", to: "Haylee", welcome: "Made this for you 💜", accessory: "Bow",
       ps: { hatch: "So proud of you!" }, letter: "You did it. Dinner's on me." });
-    await expect(page.locator("#invStatus")).toContainText("Link ready with 4 extras");
+    await expect(page.locator("#invStatus")).toContainText("Link ready with 3 extras");
     expect(link).toMatch(/#invite=[\w-]+$/);
 
     const friend = await browser.newPage();
@@ -184,7 +183,6 @@ test.describe("invites", () => {
     await friend.goto(link);
     await expect(friend.locator("#welcomeTitle")).toHaveText("For Haylee, from Eric");
     await expect(friend.locator("#welcomeMsg")).toHaveText("Made this for you 💜");
-    await expect(friend.locator("#welcomeExtras")).toContainText("Your pet is a puppy.");
     await expect(friend.locator("#welcomeExtras")).toContainText("Your pet wears a bow.");
     await expect(friend.locator("#welcomeExtras")).toContainText("Eric sealed a message inside your certificate.");
     expect(friend.url()).not.toContain("#invite");                          // removed from the address bar
@@ -268,7 +266,7 @@ test.describe("invites", () => {
 
   test("the certificate invites the next person, with the name passed on", async ({ page }) => {
     await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime(),
-      invite: { from: "Eric", to: "Haylee", welcome: "", ps: {}, letter: "", puppy: false, accessory: null } }) });
+      invite: { from: "Eric", to: "Haylee", welcome: "", ps: {}, letter: "", accessory: null } }) });
     await page.locator("#sealOpen").click();
     await page.locator("#certInvite").click();
     await expect(page.locator("#inviteDlg")).toBeVisible();

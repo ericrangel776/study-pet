@@ -98,9 +98,9 @@ export function mood(s, now) {
   if (h === 1) return "hungry";
   return "happy";
 }
-// A puppy if the name is one of the dog names, or the invite made it one.
+// A puppy only when the pet has one of the dog names.
 export function isPuppy(s, dogNames) {
-  return dogNames.includes(s.name.trim().toLowerCase()) || !!(s.invite && s.invite.puppy);
+  return dogNames.includes(s.name.trim().toLowerCase());
 }
 export const accessory = s => (s.invite && s.invite.accessory) || null;
 export function breakLength(sessions) {
@@ -228,13 +228,13 @@ export function cleanInvite(raw, notesList) {
   return {
     from, to: text(raw.to, INVITE_LIMITS.name), welcome: text(raw.welcome, INVITE_LIMITS.welcome),
     ps, letter: text(raw.letter, INVITE_LIMITS.letter),
-    puppy: raw.puppy === true, accessory: ACCESSORIES.includes(raw.accessory) ? raw.accessory : null
+    accessory: ACCESSORIES.includes(raw.accessory) ? raw.accessory : null
   };
 }
 
 // Invite <-> link-safe text: base64url of UTF-8 JSON (any language and emoji
 // work), with short keys and empty fields left out to keep links short.
-const KEYS = [["from", "f"], ["to", "t"], ["welcome", "w"], ["ps", "p"], ["letter", "l"], ["puppy", "d"], ["accessory", "a"]];
+const KEYS = [["from", "f"], ["to", "t"], ["welcome", "w"], ["ps", "p"], ["letter", "l"], ["accessory", "a"]];
 export function encodeInvite(inv) {
   const short = { v: 2 };
   KEYS.forEach(([k, s]) => {
