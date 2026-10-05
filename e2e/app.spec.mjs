@@ -153,86 +153,133 @@ test.describe("the sealed certificate", () => {
   });
 });
 
-test.describe("notes for a friend", () => {
-  // Write notes in one browser, then open the link in a fresh one, like a friend would.
-  async function writeNotes(page, from, notes) {
-    await page.locator("#giftOpen").click();
-    if (from !== null) await page.locator("#giftFrom").fill(from);
-    for (const [id, text] of Object.entries(notes)) await page.locator(`#giftFields textarea[data-note="${id}"]`).fill(text);
-    await page.locator("#giftMake").click();
+test.describe("invites", () => {
+  // Build an invite in one browser, then open it in a fresh one, like a friend would.
+  async function buildInvite(page, { from, to, welcome, puppy, accessory, ps = {}, letter } = {}) {
+    await page.locator("#invOpen").click();
+    if (from !== undefined) await page.locator("#invFrom").fill(from);
+    if (to) await page.locator("#invTo").fill(to);
+    if (welcome) await page.locator("#invWelcome").fill(welcome);
+    if (puppy) await page.locator("#invPuppy").check();
+    if (accessory) await page.locator("#invAccessories").getByRole("radio", { name: accessory }).check();
+    if (Object.keys(ps).length) {
+      await page.locator(".ps-block summary").click();
+      for (const [id, text] of Object.entries(ps)) await page.locator(`#invPS textarea[data-note="${id}"]`).fill(text);
+    }
+    if (letter) await page.locator("#invLetter").fill(letter);
+    await page.locator("#invMake").click();
+    return page.locator("#invLink").inputValue();
   }
+  const frame = page => page.locator("#screen").evaluate(c => c.toDataURL());
 
-  test("a friend's link brings their notes to a new pet", async ({ page, browser }) => {
+  test("a full invite welcomes a new friend and follows them to the certificate", async ({ page, browser }) => {
     await open(page, { save: petSave() });
-    await expect(page.locator("#notesTitle")).toHaveText("Notes from Pip");   // the pet's own notes by default
-    await writeNotes(page, "Eric", { hatch: "So proud of you! 🎉", five: "Five down!" });
-    await expect(page.locator("#giftStatus")).toContainText("2 of 6 notes");
-    const link = await page.locator("#giftLink").inputValue();
-    expect(link).toMatch(/#gift=[\w-]+$/);
+    const link = await buildInvite(page, { from: "Eric", to: "Haylee", welcome: "Made this for you 💜", puppy: true, accessory: "Bow",
+      ps: { hatch: "So proud of you!" }, letter: "You did it. Dinner's on me." });
+    await expect(page.locator("#invStatus")).toContainText("Link ready with 4 extras");
+    expect(link).toMatch(/#invite=[\w-]+$/);
 
     const friend = await browser.newPage();
     await friend.clock.install({ time: MORNING });
     await friend.goto(link);
-    await expect(friend.locator("#msg")).toContainText("Eric left you 2 notes");
-    expect(friend.url()).not.toContain("#gift");                              // removed from the address bar
-    await nameThePet(friend, "Bo");
-    await expect(friend.locator("#notesTitle")).toHaveText("Notes from Eric");
+    await expect(friend.locator("#welcomeTitle")).toHaveText("For Haylee, from Eric");
+    await expect(friend.locator("#welcomeMsg")).toHaveText("Made this for you 💜");
+    await expect(friend.locator("#welcomeExtras")).toContainText("Your pet is a puppy.");
+    await expect(friend.locator("#welcomeExtras")).toContainText("Your pet wears a bow.");
+    await expect(friend.locator("#welcomeExtras")).toContainText("Eric sealed a message inside your certificate.");
+    expect(friend.url()).not.toContain("#invite");                          // removed from the address bar
+    await friend.locator("#welcomeDlg [data-close]").click();
+    await nameThePet(friend, "Bo");                                           // the name prompt comes after the welcome
+    await expect(friend.locator("#dedication")).toHaveText("For Haylee, from Eric");
+    await expect(friend.locator("#sealHint")).toContainText("Eric left a message inside");
+    await expect(friend.locator(".locked", { hasText: "hatch the egg" })).toContainText("P.S. from Eric");
 
     await friend.getByRole("radio", { name: "15 min" }).check();
     await friend.locator("#keyFocus").click();
     await friend.clock.fastForward("15:01");
-    await expect(friend.locator("#msg")).toContainText("You unlocked a note from Eric");
     await friend.locator(".note-btn", { hasText: "Hatch the egg" }).click();
-    await expect(friend.locator("#noteTitle")).toHaveText("A note from Eric");
-    await expect(friend.locator("#noteText")).toHaveText("So proud of you! 🎉");
+    await expect(friend.locator("#noteText")).toHaveText("You hatched me! I'll keep you company while you study.");
+    await expect(friend.locator("#notePS")).toHaveText("P.S. from Eric: So proud of you!");
+    await friend.locator("#noteDlg [data-close]").click();
+
+    // Jump to a grown pet to read the certificate.
+    await friend.evaluate(k => {
+      const s = JSON.parse(localStorage.getItem(k));
+      s.sessions = 20; s.grownAt = s.lastStudyAt;
+      localStorage.setItem(k, JSON.stringify(s));
+    }, KEY);
+    await friend.reload();
+    await friend.locator("#sealOpen").click();
+    await expect(friend.locator("#certName")).toHaveValue("Haylee");
+    await expect(friend.locator("#certMsg")).toHaveText("“You did it. Dinner's on me.”\nFrom Eric");
     await friend.close();
   });
 
-  test("a pet with progress asks before switching notes", async ({ page }) => {
-    await open(page, { save: petSave({ notes: { hatch: { at: 1, read: true } } }) });
-    await writeNotes(page, "Sam", { hatch: "Hi from Sam" });
-    const link = await page.locator("#giftLink").inputValue();
-    await page.locator("#giftDlg [data-close]").click();
-
+  test("an invite's gifts change how the pet looks", async ({ page }) => {
+    await open(page, { save: petSave() });
+    const link = await buildInvite(page, { from: "Sam", accessory: "Party hat" });
+    await page.locator("#inviteDlg [data-close]").click();
+    await page.clock.pauseAt(new Date(MORNING.getTime() + 60000));
+    const before = await frame(page);
     await page.goto(link);
-    await expect(page.locator("#giftGotTitle")).toHaveText("Sam wrote you notes");
-    await page.locator("#giftAccept").click();
-    await expect(page.locator("#notesTitle")).toHaveText("Notes from Sam");
-    await expect(page.locator(".note-btn", { hasText: "Hatch the egg" })).toContainText("New");   // rewritten, so new again
+    await page.locator("#invAccept").click();
+    await page.locator("#welcomeDlg [data-close]").click();
+    expect(await frame(page)).not.toBe(before);
   });
 
-  test("the builder needs a name and at least one note", async ({ page }) => {
+  test("a plain invite only needs a name", async ({ page }) => {
     await open(page, { save: petSave() });
-    await writeNotes(page, null, { hatch: "Hello" });
-    await expect(page.locator("#giftStatus")).toHaveText("Add your name so they know who the notes are from.");
-    await page.locator("#giftFrom").fill("Eric");
-    await page.locator('#giftFields textarea[data-note="hatch"]').fill("   ");
-    await page.locator("#giftMake").click();
-    await expect(page.locator("#giftStatus")).toHaveText("Write at least one note.");
-    await expect(page.locator("#giftOut")).toBeHidden();
+    await buildInvite(page, { from: "" });
+    await expect(page.locator("#invStatus")).toHaveText("Add your name so they know who the invite is from.");
+    await expect(page.locator("#invOut")).toBeHidden();
+    await page.locator("#invFrom").fill("Sam");
+    await page.locator("#invMake").click();
+    await expect(page.locator("#invStatus")).toContainText("Link ready.");
+    expect((await page.locator("#invLink").inputValue()).length).toBeLessThan(100);
   });
 
-  test("a notes link can be pasted in, for apps a link can't open", async ({ page }) => {
-    await open(page, { save: petSave() });
-    await writeNotes(page, "Ana", { five: "Cinco!" });
-    const link = await page.locator("#giftLink").inputValue();
-    await page.locator("#giftDlg [data-close]").click();
+  test("a pet with progress asks before taking an invite", async ({ page }) => {
+    await open(page, { save: petSave({ notes: { hatch: { at: 1, read: true } } }) });
+    const link = await buildInvite(page, { from: "Sam", ps: { hatch: "Hi from Sam" } });
+    await page.locator("#inviteDlg [data-close]").click();
+    await page.goto(link);
+    await expect(page.locator("#invAskTitle")).toHaveText("Sam sent you an invite");
+    await expect(page.locator("#invAskText")).toContainText("Your progress stays the same");
+    await page.locator("#invAccept").click();
+    await page.locator("#welcomeDlg [data-close]").click();
+    await expect(page.locator("#dedication")).toHaveText("Invited by Sam");
+    await expect(page.locator("#stSessions")).toHaveText("9");
+    await expect(page.locator(".note-btn", { hasText: "Hatch the egg" })).toContainText("New");   // gained a P.S.
+  });
 
-    await page.locator("#giftPasteOpen").click();
-    await page.locator("#giftPasteInput").fill("hello");
-    await page.locator("#giftPasteGo").click();
-    await expect(page.locator("#giftPasteStatus")).toContainText("isn't a notes link");
-    await page.locator("#giftPasteInput").fill(`Check this out: ${link}`);
-    await page.locator("#giftPasteGo").click();
-    await page.locator("#giftAccept").click();
-    await expect(page.locator("#notesTitle")).toHaveText("Notes from Ana");
+  test("an invite link can be pasted in, for apps a link can't open", async ({ page }) => {
+    await open(page, { save: petSave() });
+    const link = await buildInvite(page, { from: "Ana" });
+    await page.locator("#inviteDlg [data-close]").click();
+    await page.locator("#invPasteOpen").click();
+    await page.locator("#invPasteInput").fill("hello");
+    await page.locator("#invPasteGo").click();
+    await expect(page.locator("#invPasteStatus")).toContainText("isn't an invite link");
+    await page.locator("#invPasteInput").fill(`Check this out: ${link}`);
+    await page.locator("#invPasteGo").click();
+    await page.locator("#invAccept").click();
+    await expect(page.locator("#welcomeTitle")).toHaveText("Ana invited you");
+  });
+
+  test("the certificate invites the next person, with the name passed on", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime(),
+      invite: { from: "Eric", to: "Haylee", welcome: "", ps: {}, letter: "", puppy: false, accessory: null } }) });
+    await page.locator("#sealOpen").click();
+    await page.locator("#certInvite").click();
+    await expect(page.locator("#inviteDlg")).toBeVisible();
+    await expect(page.locator("#invFrom")).toHaveValue("Haylee");
   });
 
   test("a damaged link explains itself and changes nothing", async ({ page }) => {
     await open(page, { save: petSave() });
-    await page.goto("./#gift=eyJ2IjoxLCJmcm9tIjoiRX");
-    await expect(page.locator("#msg")).toContainText("This notes link looks incomplete");
-    await expect(page.locator("#notesTitle")).toHaveText("Notes from Pip");
+    await page.goto("./#invite=eyJ2IjoyLCJmIjoiRX");
+    await expect(page.locator("#msg")).toContainText("This invite link looks incomplete");
+    await expect(page.locator("#dedication")).toBeHidden();
   });
 });
 

@@ -88,11 +88,28 @@ function drawDogFace(x, cy, rx, ry, face, blush) {
   spriteC(DOG_MOUTHS[face.mouth], x, ey + 5, INK);
   if (blush) { spriteC(["##"], x - ex - 2, ey + 4, SPOT); spriteC(["##"], x + ex + 2, ey + 4, SPOT); }
 }
+// Gifts from an invite. In these sprites "#" is ink, "+" the darker body color, "." empty.
+const ACCESSORY_SPRITES = {
+  bow:    ["##...##", "#+#.#+#", "#++#++#", "#+#.#+#", "##...##"],
+  flower: [".#.#.", "#+#+#", ".###.", "#+#+#", ".#.#."],
+  hat:    ["..#..", ".###.", "..#..", ".#+#.", ".#+#.", "#+++#", "#####"]
+};
+function sprite2(rows, x, y) {
+  x = Math.round(x); y = Math.round(y);
+  rows.forEach((r, j) => { for (let i = 0; i < r.length; i++) if (r[i] !== ".") { cx.fillStyle = r[i] === "#" ? INK : SPOT; cx.fillRect(x + i, y + j, 1, 1); } });
+}
+function drawAccessory(kind, x, cy, rx, ry) {
+  const rows = ACCESSORY_SPRITES[kind], top = cy - ry;
+  if (kind === "hat") sprite2(rows, x - 2, top - rows.length + 1);          // on top of the head
+  else if (kind === "bow") sprite2(rows, x + rx * .45 - 3, top - 1);         // off to one side, clear of the sprout
+  else sprite2(rows, x - rx * .4 - 2, top - 1);                              // tucked behind an ear
+}
 function drawPet(st, o) {
   const P = petParts(st, o.x, o.ground, o.squash || 0, o.dog);
   paintMask(makeMask(P.parts), BODY);
   if (o.dog) drawDogEars(o.x, P.cy, P.rx, P.ry, st);
-  if (st === 4) sprite(SPROUT, o.x - 2, P.cy - P.ry - 4, INK);
+  if (st === 4 && o.accessory !== "hat") sprite(SPROUT, o.x - 2, P.cy - P.ry - 4, INK);
+  if (o.accessory) drawAccessory(o.accessory, o.x, P.cy, P.rx, P.ry);
   (o.dog ? drawDogFace : drawFace)(o.x, P.cy, P.rx, P.ry, o.face, o.blush);
   return P;
 }
@@ -117,25 +134,25 @@ function drawSparkles(now) {
   [[12, 14], [50, 12], [16, 30], [48, 30]].forEach(([sx, sy], k) => { if ((k + on) % 2) sprite(SPARK, sx, sy, INK); });
 }
 
-function drawHatch(t, now, rm, dog) {
+function drawHatch(t, now, rm, dog, accessory) {
   const x = 32, cy = eggCY(), joy = { eyes: "joy", mouth: "grin" };
   if (t < 1500) {
     const shake = rm ? 0 : (Math.floor(t / 70) % 2 ? 1 : -1);
     drawEgg(x + shake, Math.min(17, Math.floor(t / 1500 * 18)));
   } else if (t < 2600) {
     const p = (t - 1500) / 1100;
-    drawPet(1, { x, ground: GROUND + Math.round((1 - p) * 8), face: joy, dog });
+    drawPet(1, { x, ground: GROUND + Math.round((1 - p) * 8), face: joy, dog, accessory });
     drawEgg(x, 0, (px, py) => py >= cy + crackDy(px + .5 - x));                                         // bottom shell
     drawEgg(x, 0, (px, py) => py < cy + crackDy(px + .5 - x), -Math.round(p * 6), -Math.round(p * 14)); // top shell flies off
   } else {
     const hop = rm ? 0 : Math.round(Math.abs(Math.sin((t - 2600) / 1000 * Math.PI * 2)) * 3);
-    drawPet(1, { x, ground: GROUND - hop, face: joy, blush: true, dog });
+    drawPet(1, { x, ground: GROUND - hop, face: joy, blush: true, dog, accessory });
     drawSparkles(now);
   }
 }
 
 /* ---------- One frame ---------- */
-// v = { now, mood, stage, hearts, unread, hatchAt, growAt, patAt, rm, dog, portrait }
+// v = { now, mood, stage, hearts, unread, hatchAt, growAt, patAt, rm, dog, accessory, portrait }
 export function draw(ctx, v) {
   cx = ctx;
   const { now, mood: m, stage: st, rm } = v;
@@ -143,7 +160,7 @@ export function draw(ctx, v) {
   if (!v.portrait) for (let k = 0; k < 4; k++) sprite(HEART, 2 + k * 6, 2, k < v.hearts ? INK : GHOST);   // portrait: just the pet, for the certificate
   if (v.unread && !v.portrait && Math.floor(now / 500) % 2) sprite(ENVELOPE, 55, 2, INK);
 
-  if (now - v.hatchAt < HATCH_MS) { drawHatch(now - v.hatchAt, now, rm, v.dog); return; }
+  if (now - v.hatchAt < HATCH_MS) { drawHatch(now - v.hatchAt, now, rm, v.dog, v.accessory); return; }
 
   const tp = now - v.patAt, patting = tp < PAT_MS, growing = now - v.growAt < GROW_MS;
   const beat = rm ? 0 : Math.floor(now / 600) % 2;
@@ -178,7 +195,7 @@ export function draw(ctx, v) {
     if (m === "hungry" && !rm && (now % 3000) < 240) x += Math.floor(now / 60) % 2 ? 1 : -1;
   }
 
-  const P = drawPet(st, { x, ground, squash, face, blush, dog: v.dog });
+  const P = drawPet(st, { x, ground, squash, face, blush, dog: v.dog, accessory: v.accessory });
 
   if (m === "break" && !patting) {
     const bounce = rm ? 6 : Math.round(Math.abs(Math.cos(now / 350)) * 12);

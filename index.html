@@ -38,6 +38,7 @@
   <section class="panel">
     <h1 id="petName">Study Pet</h1>
     <p class="lead">Finish a focus session to feed your pet, then take a short break together. Skip a few days and it gets sleepy, but it never goes away.</p>
+    <p class="dedication" id="dedication" hidden></p>
 
     <fieldset class="lengths">
       <legend>Session length</legend>
@@ -81,8 +82,8 @@
         <span class="new" id="sealNew">New</span>
       </button>
       <div class="notes-links">
-        <button class="link" id="giftOpen">Write notes for a friend</button>
-        <button class="link" id="giftPasteOpen">Paste a notes link</button>
+        <button class="link" id="invOpen">Invite a friend</button>
+        <button class="link" id="invPasteOpen">Paste an invite link</button>
       </div>
     </section>
 
@@ -118,6 +119,7 @@
 <dialog id="noteDlg">
   <h2 id="noteTitle">A note</h2>
   <p id="noteText"></p>
+  <p class="note-ps" id="notePS" hidden></p>
   <button class="primary" data-close>Close</button>
 </dialog>
 
@@ -159,48 +161,79 @@
   </div>
   <div class="row no-print">
     <button class="primary" id="certPrint">Print or save as PDF</button>
+    <button class="secondary" id="certInvite">Invite a friend</button>
     <button class="link" data-close>Close</button>
   </div>
 </dialog>
 
-<dialog id="giftDlg" aria-labelledby="giftDlgTitle">
-  <h2 id="giftDlgTitle">Write notes for a friend</h2>
-  <p>Their pet unlocks your notes as they study. Fill in as many as you like; blank ones use the pet's own words.
-     Your notes travel inside the link, not through any server.</p>
-  <label class="field"><span>Your name</span><input id="giftFrom" autocomplete="name"></label>
-  <div id="giftFields"></div>
+<dialog id="inviteDlg" aria-labelledby="inviteTitle">
+  <h2 id="inviteTitle">Invite a friend</h2>
+  <p>Send someone their own study pet, with extras just for them. Only your name is needed; everything else is optional.
+     It all travels inside the link, not through any server.</p>
+  <div class="field-row">
+    <label class="field"><span>Your name</span><input id="invFrom" autocomplete="name"></label>
+    <label class="field"><span>Their name</span><input id="invTo" autocomplete="off"></label>
+  </div>
+  <label class="field"><span>Welcome message</span><textarea id="invWelcome" placeholder="Shown when they first open the link"></textarea></label>
+
+  <fieldset class="gifts">
+    <legend>Gifts for their pet</legend>
+    <div class="gift-preview"><canvas id="invPreview" width="64" height="48" aria-hidden="true"></canvas></div>
+    <div class="gift-choices">
+      <label class="switch"><input type="checkbox" id="invPuppy"><span>Make it a puppy</span></label>
+      <div class="chips" id="invAccessories" role="radiogroup" aria-label="Accessory"></div>
+    </div>
+  </fieldset>
+
+  <details class="ps-block">
+    <summary>Add a P.S. to milestone notes</summary>
+    <p class="hint">Your words appear under the pet's note when they reach each milestone.</p>
+    <div id="invPS"></div>
+  </details>
+  <label class="field"><span>Message sealed in their certificate</span>
+    <textarea id="invLetter" placeholder="They'll read it when their pet is fully grown"></textarea></label>
+
   <div class="row">
-    <button class="primary" id="giftMake">Create link</button>
+    <button class="primary" id="invMake">Create invite link</button>
     <button class="link" data-close>Close</button>
   </div>
-  <div class="gift-out" id="giftOut" hidden>
-    <input id="giftLink" readonly aria-label="Link for your friend">
+  <div class="gift-out" id="invOut" hidden>
+    <input id="invLink" readonly aria-label="Invite link">
     <div class="row">
-      <button class="primary" id="giftShare" hidden>Share</button>
-      <button class="secondary" id="giftCopy">Copy link</button>
+      <button class="primary" id="invShare" hidden>Share</button>
+      <button class="secondary" id="invCopy">Copy link</button>
     </div>
   </div>
-  <p class="msg-line" id="giftStatus" aria-live="polite"></p>
+  <p class="msg-line" id="invStatus" aria-live="polite"></p>
 </dialog>
 
-<dialog id="giftPasteDlg" aria-labelledby="giftPasteTitle">
-  <h2 id="giftPasteTitle">Paste a notes link</h2>
-  <p>If a friend's link opened somewhere else (on iPhone, links open in Safari, not the Home Screen app), paste it here.</p>
-  <input id="giftPasteInput" autocomplete="off" aria-label="Notes link">
+<dialog id="invPasteDlg" aria-labelledby="invPasteTitle">
+  <h2 id="invPasteTitle">Paste an invite link</h2>
+  <p>If an invite opened somewhere else (on iPhone, links open in Safari, not the Home Screen app), paste it here.</p>
+  <input id="invPasteInput" autocomplete="off" aria-label="Invite link">
   <div class="row">
-    <button class="primary" id="giftPasteGo">Use link</button>
+    <button class="primary" id="invPasteGo">Use link</button>
     <button class="link" data-close>Cancel</button>
   </div>
-  <p class="msg-line" id="giftPasteStatus" aria-live="polite"></p>
+  <p class="msg-line" id="invPasteStatus" aria-live="polite"></p>
 </dialog>
 
-<dialog id="giftGotDlg" aria-labelledby="giftGotTitle">
-  <h2 id="giftGotTitle">You got notes</h2>
-  <p id="giftGotText"></p>
+<dialog id="invAskDlg" aria-labelledby="invAskTitle">
+  <h2 id="invAskTitle">You got an invite</h2>
+  <p id="invAskText"></p>
   <div class="row">
-    <button class="primary" id="giftAccept">Use these notes</button>
+    <button class="primary" id="invAccept">Add it to my pet</button>
     <button class="link" data-close>Not now</button>
   </div>
+</dialog>
+
+<dialog id="welcomeDlg" aria-labelledby="welcomeTitle">
+  <p class="welcome-kicker">An invite to Study Pet</p>
+  <h2 id="welcomeTitle"></h2>
+  <p id="welcomeLead"></p>
+  <blockquote class="welcome-msg" id="welcomeMsg" hidden></blockquote>
+  <ul class="welcome-extras" id="welcomeExtras"></ul>
+  <button class="primary" data-close>Let's study</button>
 </dialog>
 
 <script type="module" src="src/ui.js"></script>

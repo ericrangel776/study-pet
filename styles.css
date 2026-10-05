@@ -178,7 +178,7 @@ dialog .msg-line{font-size:14px;color:var(--muted);margin:12px 0 0;min-height:1.
 .cert-stats div{border-top:1px solid #E6E0F5;padding-top:8px}
 .cert-stats dt{font-size:13px;color:var(--paper-muted)}
 .cert-stats dd{margin:0;font-size:20px;font-weight:600}
-#certDlg .cert-msg{font-size:16px;font-style:italic;line-height:1.5;margin:0 0 16px}
+#certDlg .cert-msg{font-size:16px;font-style:italic;line-height:1.5;margin:0 0 16px;white-space:pre-line}
 #certDlg .cert-msg[hidden]{display:none}
 #certDlg .cert-sign{font-size:15px;color:var(--paper-muted);margin:0}
 
@@ -191,3 +191,32 @@ dialog .msg-line{font-size:14px;color:var(--muted);margin:12px 0 0;min-height:1.
   #certDlg *{outline:none !important}
   .cert{border-width:4px;padding:48px 40px;margin:0;break-inside:avoid}
 }
+
+/* Invites */
+.dedication{margin:-14px 0 24px;font-weight:500;color:var(--ink)}
+.dedication[hidden]{display:none}
+#noteDlg .note-ps{color:var(--ink);background:var(--bg);border-radius:12px;padding:10px 14px;margin:-6px 0 20px;font-size:16px}
+#noteDlg .note-ps[hidden]{display:none}
+.locked .ps-tag{display:inline-block;margin-left:6px;font-size:12px;background:var(--chip);color:var(--ink);border-radius:999px;padding:0 8px}
+dialog .field-row{display:grid;grid-template-columns:1fr 1fr;gap:12px}
+@media (max-width:420px){dialog .field-row{grid-template-columns:1fr}}
+dialog .field input{margin-bottom:12px}
+dialog fieldset.gifts{border:1px solid var(--line);border-radius:14px;padding:10px 14px 12px;margin:0 0 14px;
+  display:flex;gap:14px;align-items:center;flex-wrap:wrap}
+dialog fieldset.gifts legend{font-weight:500;font-size:15px;padding:0 4px}
+.gift-preview canvas{display:block;width:96px;image-rendering:pixelated;image-rendering:crisp-edges;background:#B9C79A;border-radius:8px}
+.gift-choices{flex:1;min-width:180px}
+.gift-choices .switch{margin-bottom:10px}
+.gift-choices .chips span{padding:5px 12px;font-size:15px}
+dialog details.ps-block{margin:0 0 14px}
+dialog details.ps-block summary{cursor:pointer;font-weight:500;font-size:15px;padding:4px 0}
+dialog details.ps-block .hint{margin:4px 0 12px}
+dialog details.ps-block textarea{min-height:64px}
+#welcomeDlg{text-align:left}
+.welcome-kicker{font-family:"Silkscreen","Courier New",monospace;font-size:12px;letter-spacing:.1em;margin:0 0 6px}
+#welcomeDlg .welcome-kicker{color:var(--muted)}
+#welcomeDlg .welcome-msg{margin:0 0 16px;padding:12px 16px;border-left:4px solid var(--bar);background:var(--bg);border-radius:0 12px 12px 0;font-size:17px;line-height:1.5;white-space:pre-line}
+#welcomeDlg .welcome-msg[hidden]{display:none}
+.welcome-extras{margin:0 0 20px;padding-left:20px;color:var(--ink)}
+.welcome-extras:empty{display:none}
+.welcome-extras li{margin-bottom:4px}

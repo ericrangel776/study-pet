@@ -7,7 +7,7 @@ It's a progressive web app: it runs in the browser, can be installed like an app
 
 ```
 src/
-  config.js    Milestones, the pet's own notes, and session lengths
+  config.js    Milestones, the pet's own notes, session lengths, and the puppy names
   engine.js    Pet rules: hearts, stages, streaks, breaks, notes, backups. No screen code.
   storage.js   Saving and loading behind a load()/save() interface
   render.js    Draws the LCD screen on a canvas
@@ -60,7 +60,10 @@ After the first visit, the app opens without an internet connection.
 ## Tips
 
 - Press **T** in the app to switch to test mode, where sessions last seconds instead of minutes. Nothing done in test mode is saved, and pressing **T** again returns to your real progress.
-- To send someone personal notes, use **Write notes for a friend** under Notes. It makes a link that carries
-  your notes after the `#`, which browsers never send to a server, so nothing personal lives in this code.
-  On iPhone, links open in Safari, which keeps separate data from the Home Screen app; use **Paste a notes link** there.
+- **Invite a friend** (under Notes, and on the certificate) makes a link that sends someone their own pet with
+  extras: a welcome message, a P.S. under any milestone note, a message sealed in their certificate, the puppy look,
+  and an accessory (bow, flower or party hat). It all rides after the `#` in the link, which browsers never send to
+  a server, so nothing personal lives in this code. On iPhone, links open in Safari, which keeps separate data from the
+  Home Screen app; use **Paste an invite link** there.
+- The certificate unseals when the pet is fully grown (20 sessions) and can be printed or saved as a PDF.
 - Run `npm test` and `npm run test:browser` before every commit.

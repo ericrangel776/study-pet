@@ -222,42 +222,68 @@ test("a backup nudge appears only when progress could be lost", () => {
   assert.equal(E.needsBackup(s, now, false), true);                // 7 days ago
 });
 
-test("a friend's notes survive the trip through a link, in any language", () => {
-  const gift = { from: "Eric", notes: { hatch: "You did it! 🎉", streak3: "¡Tres días seguidos!" } };
-  const code = E.encodeGift(gift);
+const fullInvite = {
+  from: "Eric", to: "Haylee", welcome: "Made this for you 💜", ps: { hatch: "¡Lo lograste! 🎉", streak3: "Proud of you." },
+  letter: "You did it. Dinner's on me.", puppy: true, accessory: "bow"
+};
+
+test("an invite survives the trip through a link, in any language", () => {
+  const code = E.encodeInvite(fullInvite);
   assert.match(code, /^[A-Za-z0-9_-]+$/);                  // safe to put in a URL as-is
-  assert.deepEqual(E.decodeGift(code, NOTES), gift);
+  assert.deepEqual(E.decodeInvite(code, NOTES), fullInvite);
 });
 
-test("a damaged or empty notes link is rejected", () => {
-  const good = E.encodeGift({ from: "Eric", notes: { hatch: "Hi" } });
-  for (const bad of ["", "abc", good.slice(0, -6), E.encodeGift({ from: "", notes: { hatch: "Hi" } }),
-                     E.encodeGift({ from: "Eric", notes: { hatch: "   " } })]) {
-    assert.throws(() => E.decodeGift(bad, NOTES), /looks incomplete/, JSON.stringify(bad));
+test("a plain invite needs only the sender's name, and stays short", () => {
+  const plain = E.cleanInvite({ from: "Sam" }, NOTES);
+  assert.deepEqual(plain, { from: "Sam", to: "", welcome: "", ps: {}, letter: "", puppy: false, accessory: null });
+  const code = E.encodeInvite(plain);
+  assert.ok(code.length < 40, `${code.length} characters`);
+  assert.deepEqual(E.decodeInvite(code, NOTES), plain);
+});
+
+test("a damaged or nameless invite link is rejected", () => {
+  const good = E.encodeInvite(fullInvite);
+  for (const bad of ["", "abc", good.slice(0, -8), E.encodeInvite({ ...fullInvite, from: "  " })]) {
+    assert.throws(() => E.decodeInvite(bad, NOTES), /looks incomplete/, JSON.stringify(bad));
   }
 });
 
-test("gift notes are trimmed to the limits and unknown milestones are dropped", () => {
-  const raw = { from: "  " + "E".repeat(40), notes: { hatch: "x".repeat(400), made_up: "hello" } };
-  const gift = E.cleanGift(raw, NOTES);
-  assert.equal(gift.from.length, E.GIFT_LIMITS.from);
-  assert.equal(gift.notes.hatch.length, E.GIFT_LIMITS.note);
-  assert.equal(gift.notes.made_up, undefined);
+test("invites are trimmed to the limits, and unknown extras are dropped", () => {
+  const inv = E.cleanInvite({ from: "E".repeat(40), letter: "x".repeat(900), ps: { hatch: "y".repeat(300), made_up: "hi" },
+                              puppy: "yes", accessory: "crown" }, NOTES);
+  assert.equal(inv.from.length, E.INVITE_LIMITS.name);
+  assert.equal(inv.letter.length, E.INVITE_LIMITS.letter);
+  assert.equal(inv.ps.hatch.length, E.INVITE_LIMITS.ps);
+  assert.equal(inv.ps.made_up, undefined);
+  assert.equal(inv.puppy, false);
+  assert.equal(inv.accessory, null);
 });
 
-test("using a friend's notes swaps the text and marks rewritten notes as new", () => {
+test("accepting an invite adds P.S. lines, gifts and the certificate name", () => {
   const s = E.createState(at(2026, 10, 1));
+  s.name = "Pip";
   finishSession(s, at(2026, 10, 1, 10));
   s.notes.hatch.read = true;
   const hatch = NOTES.find(n => n.id === "hatch"), five = NOTES.find(n => n.id === "five");
-  assert.equal(E.noteText(s, hatch), hatch.text);
+  assert.equal(E.notePS(s, hatch), "");
+  assert.equal(E.isPuppy(s, DOG_NAMES), false);
 
-  E.applyGift(s, { from: "Eric", notes: { hatch: "Proud of you!" } });
-  assert.equal(E.noteText(s, hatch), "Proud of you!");
-  assert.equal(E.noteText(s, five), five.text);            // blank notes fall back to the pet's own
-  assert.equal(s.notes.hatch.read, false);
+  E.applyInvite(s, fullInvite);
+  assert.equal(E.notePS(s, hatch), "¡Lo lograste! 🎉");
+  assert.equal(E.notePS(s, five), "");
+  assert.equal(s.notes.hatch.read, false);                 // gained a P.S., so it's new again
+  assert.equal(s.certName, "Haylee");
+  assert.equal(E.isPuppy(s, DOG_NAMES), true);
+  assert.equal(E.accessory(s), "bow");
   const restored = E.importBackup(E.exportBackup(s, at(2026, 10, 1, 11)), at(2026, 10, 2));
-  assert.deepEqual(restored.gift, s.gift);                 // backups keep the friend's notes
+  assert.deepEqual(restored.invite, s.invite);             // backups keep the invite
+});
+
+test("an invite doesn't overwrite a name already on the certificate", () => {
+  const s = E.createState(0);
+  s.certName = "Hay";
+  E.applyInvite(s, fullInvite);
+  assert.equal(s.certName, "Hay");
 });
 
 test("pets named Lila or Daisy, in any capitalization, are puppies", () => {

@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { NOTES, LENGTHS, DOG_NAMES } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, GIFT_LIMITS, cleanGift, encodeGift, decodeGift, sameGift, applyGift, noteText, isPuppy, certificate } from "./engine.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing, wakeLockSupported, keepAwake } from "./alerts.js";
@@ -32,8 +32,6 @@ const MOOD_TEXT = {
   sleepy: "Sleepy, misses you", focus: "Studying with you", break: "Break time, play!"
 };
 const nameOr = () => state.name || "Your pet";
-// Notes come from a friend if someone sent theirs, otherwise from the pet itself.
-const notesFrom = () => (state.gift ? state.gift.from : nameOr());
 function fmt(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000)), m = Math.floor(s / 60);
   return String(m).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
@@ -67,7 +65,7 @@ function handleEvent(ev) {
       if (ev.grewTo === STAGES.length - 1) text += " Your certificate is unsealed. Find it under Notes.";
     }
     else text = `Session done. ${nameOr()} had a snack.`;
-    if (ev.notes.length) text += ` You unlocked ${ev.notes.length === 1 ? "a note" : ev.notes.length + " notes"} from ${notesFrom()}.`;
+    if (ev.notes.length) text += ` You unlocked ${ev.notes.length === 1 ? "a note" : ev.notes.length + " notes"}.`;
     if (!ev.breakSkipped) text += ` Enjoy a ${ev.breakMinutes}-minute break.`;
     say(text);
     alertUser("Session complete!", text, [660, 880, 1320]);
@@ -82,10 +80,10 @@ function handleEvent(ev) {
 
 /* ---------- Rendering ---------- */
 function renderNotes() {
-  const sig = JSON.stringify([state.notes, state.gift && state.gift.from, state.name]);
+  const sig = JSON.stringify([state.notes, state.invite, state.name]);
   if (sig === notesSig) return;      // only rebuild when notes change, so buttons keep focus
   notesSig = sig;
-  $("notesTitle").textContent = `Notes from ${notesFrom()}`;
+  $("notesTitle").textContent = `Notes from ${nameOr()}`;
   const ul = $("notesList");
   ul.innerHTML = "";
   NOTES.forEach(n => {
@@ -103,6 +101,11 @@ function renderNotes() {
       const s = document.createElement("span");
       s.className = "locked";
       s.textContent = `Locked: ${n.hint.toLowerCase()}`;
+      if (notePS(state, n)) {   // a teaser: something from the inviter waits here
+        const tag = document.createElement("span");
+        tag.className = "ps-tag"; tag.textContent = `P.S. from ${state.invite.from}`;
+        s.appendChild(tag);
+      }
       li.appendChild(s);
     }
     ul.appendChild(li);
@@ -112,7 +115,7 @@ function renderNotes() {
 function render() {
   const now = Date.now(), m = mood(state, now), st = stageIndex(state);
   const unread = unreadNotes(state, NOTES);
-  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, rm: RM, dog: isPuppy(state, DOG_NAMES) });
+  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, rm: RM, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state) });
   canvas.setAttribute("aria-label", `${nameOr()}, ${STAGES[st].name}, ${MOOD_TEXT[m].toLowerCase()}${unread ? ", new note waiting" : ""}`);
 
   let title = "Study Pet";
@@ -134,6 +137,9 @@ function render() {
   document.querySelectorAll("#chips input").forEach(i => { i.disabled = !!state.active; i.checked = +i.value === state.length; });
 
   $("petName").textContent = nameOr();
+  const inv = state.invite;
+  $("dedication").textContent = inv ? (inv.to ? `For ${inv.to}, from ${inv.from}` : `Invited by ${inv.from}`) : "";
+  $("dedication").hidden = !inv;
   $("stStreak").textContent = streakNow(state, now);
   $("stSessions").textContent = state.sessions;
   $("stTime").textContent = fmtMinutes(state.minutes);
@@ -159,7 +165,7 @@ function renderSeal() {
   $("sealLocked").hidden = c.earned;
   $("sealOpen").hidden = !c.earned;
   if (c.earned) { $("sealNew").hidden = state.certSeen; return; }
-  $("sealHint").textContent = `Opens when ${nameOr()} is fully grown`;
+  $("sealHint").textContent = `Opens when ${nameOr()} is fully grown` + (state.invite && state.invite.letter ? `. ${state.invite.from} left a message inside.` : "");
   $("sealFill").style.width = (c.progress / c.goal * 100) + "%";
   $("sealMeter").setAttribute("aria-valuemax", c.goal);
   $("sealMeter").setAttribute("aria-valuenow", c.progress);
@@ -182,8 +188,12 @@ function openCertificate() {
     div.append(dt, dd); $("certStats").appendChild(div);
   });
   $("certSigned").textContent = `Signed, ${pet}${isPuppy(state, DOG_NAMES) ? " (woof!)" : ""}`;
+  const letter = state.invite && state.invite.letter;
+  $("certMsg").textContent = letter ? `“${letter}”
+From ${state.invite.from}` : "";
+  $("certMsg").hidden = !letter;
   draw($("certPet").getContext("2d"), { now: 1300, mood: "happy", stage: STAGES.length - 1, hearts: 0, unread: 0,
-    hatchAt: -1e12, growAt: -1e12, patAt: -1e12, rm: true, dog: isPuppy(state, DOG_NAMES), portrait: true });
+    hatchAt: -1e12, growAt: -1e12, patAt: -1e12, rm: true, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), portrait: true });
   state.certSeen = true; save();
   show($("certDlg"));
   if (!state.certName) $("certName").focus();
@@ -281,8 +291,11 @@ const hide = d => (d.close ? d.close() : d.removeAttribute("open"));
 document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => hide(b.closest("dialog"))));
 
 function openNote(n) {
-  $("noteTitle").textContent = `A note from ${notesFrom()}`;
-  $("noteText").textContent = noteText(state, n);
+  $("noteTitle").textContent = `A note from ${nameOr()}`;
+  $("noteText").textContent = n.text;
+  const ps = notePS(state, n);
+  $("notePS").textContent = ps ? `P.S. from ${state.invite.from}: ${ps}` : "";
+  $("notePS").hidden = !ps;
   state.notes[n.id].read = true;
   save(); show($("noteDlg")); render();
 }
@@ -447,84 +460,132 @@ document.addEventListener("keydown", e => {
   } catch (e) { downloads = null; }
 })();
 
-/* ---------- Notes for a friend ---------- */
-// Writing: one box per milestone. What's typed stays put if the dialog is closed and reopened.
-$("giftFrom").maxLength = GIFT_LIMITS.from;
+/* ---------- Invites ---------- */
+// Writing: the builder keeps what's typed if it's closed and reopened.
+const INVITE_ACCESSORIES = [[null, "None"], ["bow", "Bow"], ["flower", "Flower"], ["hat", "Party hat"]];
+$("invFrom").maxLength = $("invTo").maxLength = INVITE_LIMITS.name;
+$("invWelcome").maxLength = INVITE_LIMITS.welcome;
+$("invLetter").maxLength = INVITE_LIMITS.letter;
+INVITE_ACCESSORIES.forEach(([value, text]) => {
+  const label = document.createElement("label"), input = document.createElement("input"), span = document.createElement("span");
+  input.type = "radio"; input.name = "invAccessory"; input.value = value || ""; input.checked = !value;
+  span.textContent = text;
+  label.append(input, span);
+  $("invAccessories").appendChild(label);
+});
 NOTES.forEach(n => {
   const label = document.createElement("label"), span = document.createElement("span"), box = document.createElement("textarea");
   label.className = "field";
   span.textContent = `When they ${n.hint.charAt(0).toLowerCase() + n.hint.slice(1)}`.replace("your pet", "their pet");
-  box.dataset.note = n.id; box.maxLength = GIFT_LIMITS.note; box.placeholder = n.text;
+  box.dataset.note = n.id; box.maxLength = INVITE_LIMITS.ps; box.placeholder = `Under: "${n.text}"`;
   label.append(span, box);
-  $("giftFields").appendChild(label);
+  $("invPS").appendChild(label);
 });
-$("giftOpen").addEventListener("click", () => { $("giftStatus").textContent = ""; show($("giftDlg")); });
 
-$("giftMake").addEventListener("click", () => {
-  const notes = {};
-  document.querySelectorAll("#giftFields textarea").forEach(b => { notes[b.dataset.note] = b.value; });
-  const gift = cleanGift({ from: $("giftFrom").value, notes }, NOTES);
-  if (!gift) {
-    $("giftOut").hidden = true;
-    $("giftStatus").textContent = !$("giftFrom").value.trim() ? "Add your name so they know who the notes are from." : "Write at least one note.";
-    return;
-  }
-  $("giftLink").value = `${location.origin}${location.pathname}#gift=${encodeGift(gift)}`;
-  $("giftShare").hidden = !navigator.share;
-  $("giftOut").hidden = false;
-  $("giftStatus").textContent = `Link ready with ${Object.keys(gift.notes).length} of ${NOTES.length} notes. Anyone with the link can read them.`;
+function inviteFromForm() {
+  const ps = {};
+  document.querySelectorAll("#invPS textarea").forEach(b => { ps[b.dataset.note] = b.value; });
+  return cleanInvite({
+    from: $("invFrom").value, to: $("invTo").value, welcome: $("invWelcome").value, ps, letter: $("invLetter").value,
+    puppy: $("invPuppy").checked, accessory: document.querySelector('input[name="invAccessory"]:checked').value || null
+  }, NOTES);
+}
+// Show the gifts on a teen pet as they're picked.
+function drawInvitePreview() {
+  draw($("invPreview").getContext("2d"), { now: 1300, mood: "happy", stage: 2, hearts: 0, unread: 0, hatchAt: -1e12, growAt: -1e12, patAt: -1e12,
+    rm: true, portrait: true, dog: $("invPuppy").checked, accessory: document.querySelector('input[name="invAccessory"]:checked').value || null });
+}
+$("invPuppy").addEventListener("change", drawInvitePreview);
+$("invAccessories").addEventListener("change", drawInvitePreview);
+
+function openInvite() {
+  $("invStatus").textContent = "";
+  if (!$("invFrom").value && state.invite && state.invite.to) $("invFrom").value = state.invite.to;   // pass it on
+  drawInvitePreview();
+  show($("inviteDlg"));
+}
+$("invOpen").addEventListener("click", openInvite);
+$("certInvite").addEventListener("click", () => { hide($("certDlg")); openInvite(); });
+
+$("invMake").addEventListener("click", () => {
+  const inv = inviteFromForm();
+  if (!inv) { $("invOut").hidden = true; $("invStatus").textContent = "Add your name so they know who the invite is from."; return; }
+  $("invLink").value = `${location.origin}${location.pathname}#invite=${encodeInvite(inv)}`;
+  $("invShare").hidden = !navigator.share;
+  $("invOut").hidden = false;
+  const extras = inviteExtras(inv);
+  $("invStatus").textContent = (extras.length ? `Link ready with ${extras.length} ${extras.length === 1 ? "extra" : "extras"}.` : "Link ready.")
+    + " Anyone with the link can see what's in it.";
 });
-$("giftCopy").addEventListener("click", async () => {
-  const input = $("giftLink");
+$("invCopy").addEventListener("click", async () => {
+  const input = $("invLink");
   let ok = false;
   try { await navigator.clipboard.writeText(input.value); ok = true; }
   catch (e) { input.select(); try { ok = document.execCommand("copy"); } catch (e2) { ok = false; } }
-  $("giftStatus").textContent = ok ? "Copied. Send it to your friend." : "Select the link and copy it.";
+  $("invStatus").textContent = ok ? "Copied. Send it to your friend." : "Select the link and copy it.";
 });
-$("giftShare").addEventListener("click", () => {
-  navigator.share({ title: "Study Pet", text: `${$("giftFrom").value.trim()} wrote you some notes. Study with your pet to unlock them.`, url: $("giftLink").value })
+$("invShare").addEventListener("click", () => {
+  const inv = inviteFromForm();
+  navigator.share({ title: "Study Pet", text: `${inv.from} invited you to raise a study pet.`, url: $("invLink").value })
     .catch(() => {});   // closing the share sheet isn't an error
 });
 
-// Receiving: open the app with #gift=... A brand-new pet takes the notes right
-// away; a pet with progress (or other notes) asks first.
-let pendingGift = null;
-function useGift(gift) {
-  applyGift(state, gift); save(); notesSig = "";
-  say(`${gift.from} left you ${Object.keys(gift.notes).length === 1 ? "a note" : Object.keys(gift.notes).length + " notes"}. They unlock as you study.`);
-  render();
+// What an invite adds, in plain words, for the welcome card and the builder.
+function inviteExtras(inv) {
+  const out = [], ps = Object.keys(inv.ps).length;
+  if (inv.puppy) out.push("Your pet is a puppy.");
+  if (inv.accessory) out.push(`Your pet wears ${{ bow: "a bow", flower: "a flower", hat: "a party hat" }[inv.accessory]}.`);
+  if (ps) out.push(`${inv.from} added a P.S. to ${ps === 1 ? "a milestone note" : ps + " milestone notes"}.`);
+  if (inv.letter) out.push(`${inv.from} sealed a message inside your certificate.`);
+  return out;
 }
-function receiveGift() {
-  const m = location.hash.match(/^#gift=([\w-]+)/);
-  if (!m) return;
-  history.replaceState(null, "", location.pathname + location.search);   // keep the notes out of bookmarks and history
-  let gift;
-  try { gift = decodeGift(m[1], NOTES); } catch (e) { say(e.message); return; }
-  if (testMode) { say("Leave test mode (press T), then open the notes link again."); return; }
-  if (sameGift(state.gift, gift)) return;
-  if (state.sessions === 0 && !state.gift) { useGift(gift); return; }
-  pendingGift = gift;
-  $("giftGotTitle").textContent = `${gift.from} wrote you notes`;
-  $("giftGotText").textContent = state.gift
-    ? `They'll replace the notes from ${state.gift.from}. Notes you've already unlocked show the new words.`
-    : "They'll replace your pet's notes. Notes you've already unlocked show the new words.";
-  show($("giftGotDlg"));
-}
-$("giftAccept").addEventListener("click", () => {
-  if (pendingGift) useGift(pendingGift);
-  pendingGift = null; hide($("giftGotDlg"));
-});
-window.addEventListener("hashchange", receiveGift);
 
-$("giftPasteOpen").addEventListener("click", () => {
-  $("giftPasteInput").value = ""; $("giftPasteStatus").textContent = "";
-  show($("giftPasteDlg")); $("giftPasteInput").focus();
+// Receiving: open the app with #invite=... A brand-new pet takes it right
+// away; a pet with progress (or another invite) asks first.
+let pendingInvite = null;
+function useInvite(inv) {
+  applyInvite(state, inv); save(); notesSig = "";
+  $("welcomeTitle").textContent = inv.to ? `For ${inv.to}, from ${inv.from}` : `${inv.from} invited you`;
+  $("welcomeLead").textContent = `${inv.from} wants you to have a study pet. Finish focus sessions to hatch it and help it grow.`;
+  $("welcomeMsg").textContent = inv.welcome;
+  $("welcomeMsg").hidden = !inv.welcome;
+  $("welcomeExtras").innerHTML = "";
+  inviteExtras(inv).forEach(t => { const li = document.createElement("li"); li.textContent = t; $("welcomeExtras").appendChild(li); });
+  render();
+  show($("welcomeDlg"));
+}
+function receiveInvite() {
+  const m = location.hash.match(/^#invite=([\w-]+)/);
+  if (!m) return;
+  history.replaceState(null, "", location.pathname + location.search);   // keep it out of bookmarks and history
+  let inv;
+  try { inv = decodeInvite(m[1], NOTES); } catch (e) { say(e.message); return; }
+  if (testMode) { say("Leave test mode (press T), then open the invite link again."); return; }
+  if (sameInvite(state.invite, inv)) return;
+  if (state.sessions === 0 && !state.invite) { useInvite(inv); return; }
+  pendingInvite = inv;
+  $("invAskTitle").textContent = `${inv.from} sent you an invite`;
+  $("invAskText").textContent = `It adds ${inv.from}'s extras to ${nameOr()}. Your progress stays the same.`
+    + (state.invite ? ` It replaces the extras from ${state.invite.from}.` : "");
+  show($("invAskDlg"));
+}
+$("invAccept").addEventListener("click", () => {
+  hide($("invAskDlg"));
+  if (pendingInvite) useInvite(pendingInvite);
+  pendingInvite = null;
 });
-$("giftPasteGo").addEventListener("click", () => {
-  const m = $("giftPasteInput").value.match(/#gift=([\w-]+)/);
-  if (!m) { $("giftPasteStatus").textContent = "That isn't a notes link. It should contain #gift="; return; }
-  hide($("giftPasteDlg"));
-  location.hash = "gift=" + m[1];   // the hashchange listener takes it from here
+$("welcomeDlg").addEventListener("close", () => { if (!state.name) openName(); });
+window.addEventListener("hashchange", receiveInvite);
+
+$("invPasteOpen").addEventListener("click", () => {
+  $("invPasteInput").value = ""; $("invPasteStatus").textContent = "";
+  show($("invPasteDlg")); $("invPasteInput").focus();
+});
+$("invPasteGo").addEventListener("click", () => {
+  const m = $("invPasteInput").value.match(/#invite=([\w-]+)/);
+  if (!m) { $("invPasteStatus").textContent = "That isn't an invite link. It should contain #invite="; return; }
+  hide($("invPasteDlg"));
+  location.hash = "invite=" + m[1];   // the hashchange listener takes it from here
 });
 
 /* ---------- Installing ---------- */
@@ -552,5 +613,5 @@ save();
 protectProgress();
 setInterval(tick, 100);
 tick();
-receiveGift();
-if (!state.name) openName();
+receiveInvite();
+if (!state.name && !$("welcomeDlg").open && !$("invAskDlg").open) openName();
