@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { NOTES, LENGTHS, DOG_NAMES } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate } from "./engine.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, newFeature, describeLook } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing, wakeLockSupported, keepAwake } from "./alerts.js";
@@ -59,9 +59,10 @@ function handleEvent(ev) {
   if (!ev) return;
   if (ev.type === "focusDone") {
     let text;
-    if (ev.grewTo === 1) { hatchAt = Date.now(); text = `${nameOr()} hatched!`; }
+    const isNew = ev.grewTo ? newFeature(petLook(state), ev.grewTo, isPuppy(state, DOG_NAMES)) : "";   // each stage shows off something new
+    if (ev.grewTo === 1) { hatchAt = Date.now(); text = `${nameOr()} hatched! It's ${isNew}.`; }
     else if (ev.grewTo) {
-      growAt = Date.now(); text = `${nameOr()} grew into a ${STAGES[ev.grewTo].name}!`;
+      growAt = Date.now(); text = `${nameOr()} grew into a ${STAGES[ev.grewTo].name}${isNew ? ` and has ${isNew}` : ""}!`;
       if (ev.grewTo === STAGES.length - 1) text += " Your certificate is unsealed. Find it under Notes.";
     }
     else text = `Session done. ${nameOr()} had a snack.`;
@@ -115,7 +116,7 @@ function renderNotes() {
 function render() {
   const now = Date.now(), m = mood(state, now), st = stageIndex(state);
   const unread = unreadNotes(state, NOTES);
-  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, rm: RM, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state) });
+  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, rm: RM, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state) });
   canvas.setAttribute("aria-label", `${nameOr()}, ${STAGES[st].name}, ${MOOD_TEXT[m].toLowerCase()}${unread ? ", new note waiting" : ""}`);
 
   let title = "Study Pet";
@@ -193,7 +194,8 @@ function openCertificate() {
 From ${state.invite.from}` : "";
   $("certMsg").hidden = !letter;
   draw($("certPet").getContext("2d"), { now: 1300, mood: "happy", stage: STAGES.length - 1, hearts: 0, unread: 0,
-    hatchAt: -1e12, growAt: -1e12, patAt: -1e12, rm: true, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), portrait: true });
+    hatchAt: -1e12, growAt: -1e12, patAt: -1e12, rm: true, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state), portrait: true });
+  $("certLook").textContent = describeLook(petLook(state), isPuppy(state, DOG_NAMES));
   state.certSeen = true; save();
   show($("certDlg"));
   render();

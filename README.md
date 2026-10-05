@@ -65,5 +65,8 @@ After the first visit, the app opens without an internet connection.
   and an accessory (bow, flower or party hat). It all rides after the `#` in the link, which browsers never send to
   a server, so nothing personal lives in this code. On iPhone, links open in Safari, which keeps separate data from the
   Home Screen app; use **Paste an invite link** there.
+- Every pet gets a random seed when it is created that picks its shape, markings, ears, tail and topper,
+  revealed one stage at a time, so no two pets grow up alike (see `TRAITS` in `src/engine.js`).
+  A pet named Lila or Daisy is a puppy (`DOG_NAMES` in `src/config.js`).
 - The certificate unseals when the pet is fully grown (20 sessions) and can be printed or saved as a PDF.
 - Run `npm test` and `npm run test:browser` before every commit.

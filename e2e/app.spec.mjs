@@ -151,6 +151,45 @@ test("naming the pet Lila or Daisy turns it into a puppy", async ({ page }) => {
   expect(await frame()).toBe(blob);
 });
 
+test.describe("every pet is different", () => {
+  const frameFor = async (browser, seed) => {
+    const page = await browser.newPage();
+    await open(page, { save: petSave({ seed }) });
+    await page.clock.pauseAt(new Date(MORNING.getTime() + 60000));
+    const url = await page.locator("#screen").evaluate(c => c.toDataURL());
+    await page.close();
+    return url;
+  };
+
+  test("pets with different seeds look different, and a seed always looks the same", async ({ browser }) => {
+    const a = await frameFor(browser, 11), b = await frameFor(browser, 44);
+    expect(a).not.toBe(b);
+    expect(await frameFor(browser, 11)).toBe(a);
+  });
+
+  test("growing up announces what's new, and the certificate describes the pet", async ({ page }) => {
+    // Seed 11: a chubby pet with a belly patch, bunny ears, a fluffy tail and a curl on top.
+    await open(page, { save: petSave({ seed: 11, sessions: 3, minutes: 75 }) });
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+    await expect(page.locator("#msg")).toContainText("Pip grew into a kid and has long bunny ears!");
+
+    await page.evaluate(k => { const s = JSON.parse(localStorage.getItem(k)); s.sessions = 20; s.grownAt = s.lastStudyAt; localStorage.setItem(k, JSON.stringify(s)); }, KEY);
+    await page.reload();
+    await page.locator("#sealOpen").click();
+    await expect(page.locator("#certLook")).toHaveText("A chubby pet with a belly patch, long bunny ears, a fluffy tail and a curl on top.");
+  });
+
+  test("hatching says what kind of pet came out", async ({ page }) => {
+    await open(page, { save: petSave({ seed: 22, sessions: 0, minutes: 0 }) });
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+    await expect(page.locator("#msg")).toContainText("Pip hatched! It's a spotted chubby one.");
+  });
+});
+
 test.describe("the sealed certificate", () => {
   test("shows progress, unseals at full growth, and names the person", async ({ page }) => {
     await open(page, { save: petSave({ sessions: 19, minutes: 475, bestStreak: 5, firstStudyAt: MORNING.getTime() - 20 * 864e5 }) });
