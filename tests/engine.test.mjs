@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as E from "../src/engine.js";
-import { NOTES } from "../src/config.js";
+import { NOTES, DOG_NAMES } from "../src/config.js";
 
 // Run every test in a time zone with daylight saving, so date bugs show up.
 process.env.TZ = "America/Chicago";
@@ -258,6 +258,14 @@ test("using a friend's notes swaps the text and marks rewritten notes as new", (
   assert.equal(s.notes.hatch.read, false);
   const restored = E.importBackup(E.exportBackup(s, at(2026, 10, 1, 11)), at(2026, 10, 2));
   assert.deepEqual(restored.gift, s.gift);                 // backups keep the friend's notes
+});
+
+test("pets named Lila or Daisy, in any capitalization, are puppies", () => {
+  const s = E.createState(0);
+  for (const [name, puppy] of [["Lila", true], ["DAISY", true], ["  daisy ", true], ["Lilac", false], ["Pip", false], ["", false]]) {
+    s.name = name;
+    assert.equal(E.isPuppy(s, DOG_NAMES), puppy, JSON.stringify(name));
+  }
 });
 
 test("days ago counts calendar days, not 24-hour periods", () => {

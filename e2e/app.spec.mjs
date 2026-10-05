@@ -96,6 +96,25 @@ test("notes unlock, open, and lose their New badge", async ({ page }) => {
   await expect(note).not.toContainText("New");
 });
 
+test("naming the pet Lila or Daisy turns it into a puppy", async ({ page }) => {
+  await open(page, { save: petSave() });
+  await page.clock.pauseAt(new Date(MORNING.getTime() + 60000));   // freeze time so frames are comparable
+  const frame = () => page.locator("#screen").evaluate(c => c.toDataURL());
+  const rename = async name => {
+    await page.locator("#renameBtn").click();
+    await page.locator("#nameInput").fill(name);
+    await page.locator("#nameSave").click();
+  };
+  const blob = await frame();
+  await rename("LILA");
+  const puppy = await frame();
+  expect(puppy).not.toBe(blob);
+  await rename("daisy");
+  expect(await frame()).toBe(puppy);
+  await rename("Lilac");
+  expect(await frame()).toBe(blob);
+});
+
 test.describe("notes for a friend", () => {
   // Write notes in one browser, then open the link in a fresh one, like a friend would.
   async function writeNotes(page, from, notes) {
