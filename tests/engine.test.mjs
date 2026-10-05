@@ -259,7 +259,7 @@ test("invites are trimmed to the limits, and unknown extras are dropped", () => 
   assert.equal(inv.accessory, null);
 });
 
-test("accepting an invite adds P.S. lines, gifts and the certificate name", () => {
+test("accepting an invite adds P.S. lines, gifts and the person's name", () => {
   const s = E.createState(at(2026, 10, 1));
   s.name = "Pip";
   finishSession(s, at(2026, 10, 1, 10));
@@ -272,18 +272,27 @@ test("accepting an invite adds P.S. lines, gifts and the certificate name", () =
   assert.equal(E.notePS(s, hatch), "¡Lo lograste! 🎉");
   assert.equal(E.notePS(s, five), "");
   assert.equal(s.notes.hatch.read, false);                 // gained a P.S., so it's new again
-  assert.equal(s.certName, "Haylee");
+  assert.equal(s.userName, "Haylee");
   assert.equal(E.isPuppy(s, DOG_NAMES), false);             // invites never make a puppy
   assert.equal(E.accessory(s), "bow");
   const restored = E.importBackup(E.exportBackup(s, at(2026, 10, 1, 11)), at(2026, 10, 2));
   assert.deepEqual(restored.invite, s.invite);             // backups keep the invite
 });
 
-test("an invite doesn't overwrite a name already on the certificate", () => {
+test("an invite doesn't overwrite the person's own name", () => {
   const s = E.createState(0);
-  s.certName = "Hay";
+  s.userName = "Hay";
   E.applyInvite(s, fullInvite);
-  assert.equal(s.certName, "Hay");
+  assert.equal(s.userName, "Hay");
+});
+
+test("older saves keep the person's name from the certificate or an invite", () => {
+  const base = { version: 3, sessions: 2, minutes: 50, hearts: 2, heartsAt: 1 };
+  assert.equal(E.migrate({ ...base, certName: " Haylee " }, 0).userName, "Haylee");
+  assert.equal(E.migrate({ ...base, invite: { ...fullInvite, to: "Hay" } }, 0).userName, "Hay");
+  assert.equal(E.migrate({ ...base, userName: "H", certName: "Other" }, 0).userName, "H");
+  assert.equal(E.migrate(base, 0).userName, "");
+  assert.equal("certName" in E.migrate({ ...base, certName: "x" }, 0), false);
 });
 
 test("pets named Lila or Daisy, in any capitalization, are puppies", () => {

@@ -14,15 +14,17 @@ async function open(page, { save, time = MORNING } = {}) {
     await page.reload();
   }
 }
-async function nameThePet(page, name = "Pip") {
+// Fills the first-visit dialog. The person's name is only typed if it isn't already there.
+async function nameThePet(page, name = "Pip", user = "Alex") {
   await expect(page.locator("#nameDlg")).toBeVisible();
+  if (!(await page.locator("#userInput").inputValue())) await page.locator("#userInput").fill(user);
   await page.locator("#nameInput").fill(name);
   await page.locator("#nameSave").click();
   await expect(page.locator("#nameDlg")).toBeHidden();
 }
 const saved = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY);
 const petSave = (extra = {}) => ({
-  version: 3, name: "Pip", sessions: 9, minutes: 225, hearts: 3, heartsAt: MORNING.getTime(),
+  version: 3, name: "Pip", userName: "Alex", sessions: 9, minutes: 225, hearts: 3, heartsAt: MORNING.getTime(),
   streak: 1, lastDay: "2026-10-5", lastStudyAt: MORNING.getTime(), length: 25,
   active: null, onBreak: null, notes: {}, days: {}, settings: { sound: false, notify: false, lastBackupAt: null }, ...extra
 });
@@ -32,6 +34,40 @@ test("a first visit asks for the pet's name", async ({ page }) => {
   await nameThePet(page, "Mochi");
   await expect(page.locator("#petName")).toHaveText("Mochi");
   await expect(page.locator("#small")).toHaveText("Study once to hatch");
+});
+
+test("a first visit needs the person's name, and greets them by it", async ({ page }) => {
+  await open(page);
+  await page.locator("#nameInput").fill("Mochi");
+  await page.locator("#nameSave").click();
+  await expect(page.locator("#nameStatus")).toHaveText("What should we call you?");
+  await expect(page.locator("#nameDlg")).toBeVisible();
+  await page.locator("#userInput").fill("Jordan");
+  await page.locator("#nameSave").click();
+  await expect(page.locator("#nameDlg")).toBeHidden();
+  await expect(page.locator("#msg")).toHaveText("Nice to meet you, Jordan! Mochi is waiting in the egg.");
+  await page.reload();
+  await expect(page.locator("#msg")).toHaveText("Hi, Jordan! Mochi is ready when you are.");
+  await page.locator("#invOpen").click();
+  await expect(page.locator("#invFrom")).toHaveValue("Jordan");               // invites are from them by default
+});
+
+test("an older save without the person's name asks for it once", async ({ page }) => {
+  await open(page, { save: petSave({ userName: undefined }) });
+  await expect(page.locator("#nameDlg")).toBeVisible();
+  await expect(page.locator("#nameInput")).toHaveValue("Pip");
+  await page.locator("#userInput").fill("Sam");
+  await page.locator("#nameSave").click();
+  await page.reload();
+  await expect(page.locator("#nameDlg")).toBeHidden();
+});
+
+test("starting over keeps the person's name", async ({ page }) => {
+  await open(page, { save: petSave() });
+  await page.locator("#resetBtn").click();
+  await page.locator("#resetBtn").click();
+  await expect(page.locator("#userInput")).toHaveValue("Alex");
+  await expect(page.locator("#nameInput")).toHaveValue("");
 });
 
 test("a finished session hatches the egg, logs the time and is saved", async ({ page }) => {
@@ -116,7 +152,7 @@ test("naming the pet Lila or Daisy turns it into a puppy", async ({ page }) => {
 });
 
 test.describe("the sealed certificate", () => {
-  test("shows progress, unseals at full growth, and remembers the name", async ({ page }) => {
+  test("shows progress, unseals at full growth, and names the person", async ({ page }) => {
     await open(page, { save: petSave({ sessions: 19, minutes: 475, bestStreak: 5, firstStudyAt: MORNING.getTime() - 20 * 864e5 }) });
     await expect(page.locator("#sealCount")).toHaveText("19 of 20 sessions");
     await expect(page.locator("#sealMeter")).toHaveAttribute("aria-valuenow", "19");
@@ -134,13 +170,9 @@ test.describe("the sealed certificate", () => {
     await expect(page.locator("#certStats")).toContainText("Focus sessions20");
     await expect(page.locator("#certStats")).toContainText("Focus time8h 10m");
     await expect(page.locator("#certStats")).toContainText("Longest streak5 days");
-    await page.locator("#certName").fill("Haylee");
+    await expect(page.locator("#certName")).toHaveText("Alex");                // the person's own name
     await page.locator("#certDlg [data-close]").click();
     await expect(page.locator("#sealNew")).toBeHidden();
-
-    await page.reload();
-    await page.locator("#sealOpen").click();
-    await expect(page.locator("#certName")).toHaveValue("Haylee");
   });
 
   test("prints only the certificate", async ({ page }) => {
@@ -187,7 +219,8 @@ test.describe("invites", () => {
     await expect(friend.locator("#welcomeExtras")).toContainText("Eric sealed a message inside your certificate.");
     expect(friend.url()).not.toContain("#invite");                          // removed from the address bar
     await friend.locator("#welcomeDlg [data-close]").click();
-    await nameThePet(friend, "Bo");                                           // the name prompt comes after the welcome
+    await expect(friend.locator("#userInput")).toHaveValue("Haylee");         // the name prompt comes after the welcome, pre-filled
+    await nameThePet(friend, "Bo");
     await expect(friend.locator("#dedication")).toHaveText("For Haylee, from Eric");
     await expect(friend.locator("#sealHint")).toContainText("Eric left a message inside");
     await expect(friend.locator(".locked", { hasText: "hatch the egg" })).toContainText("P.S. from Eric");
@@ -208,7 +241,7 @@ test.describe("invites", () => {
     }, KEY);
     await friend.reload();
     await friend.locator("#sealOpen").click();
-    await expect(friend.locator("#certName")).toHaveValue("Haylee");
+    await expect(friend.locator("#certName")).toHaveText("Haylee");
     await expect(friend.locator("#certMsg")).toHaveText("“You did it. Dinner's on me.”\nFrom Eric");
     await friend.close();
   });
@@ -264,13 +297,13 @@ test.describe("invites", () => {
     await expect(page.locator("#welcomeTitle")).toHaveText("Ana invited you");
   });
 
-  test("the certificate invites the next person, with the name passed on", async ({ page }) => {
+  test("the certificate invites the next person, from them by name", async ({ page }) => {
     await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime(),
       invite: { from: "Eric", to: "Haylee", welcome: "", ps: {}, letter: "", accessory: null } }) });
     await page.locator("#sealOpen").click();
     await page.locator("#certInvite").click();
     await expect(page.locator("#inviteDlg")).toBeVisible();
-    await expect(page.locator("#invFrom")).toHaveValue("Haylee");
+    await expect(page.locator("#invFrom")).toHaveValue("Alex");               // from the person, by name
   });
 
   test("a damaged link explains itself and changes nothing", async ({ page }) => {

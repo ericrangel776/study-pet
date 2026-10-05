@@ -102,18 +102,20 @@
     </section>
 
     <div class="tools">
-      <button class="link" id="renameBtn">Rename</button>
+      <button class="link" id="renameBtn">Change names</button>
       <button class="link" id="resetBtn">Start over</button>
       <span class="tag" id="testTag" hidden>Test mode: seconds, not saved</span>
     </div>
   </section>
 </main>
 
-<dialog id="nameDlg">
-  <h2>Name your pet</h2>
-  <p>It hatches after your first focus session.</p>
-  <input id="nameInput" maxlength="16" autocomplete="off" placeholder="Pip">
-  <button class="primary" id="nameSave">Save name</button>
+<dialog id="nameDlg" aria-labelledby="nameTitle">
+  <h2 id="nameTitle">Welcome to Study Pet</h2>
+  <p id="nameLead">What should we call you? Then name the pet that will study with you. It hatches after your first focus session.</p>
+  <label class="field"><span>Your name</span><input id="userInput" maxlength="24" autocomplete="given-name"></label>
+  <label class="field"><span>Your pet's name</span><input id="nameInput" maxlength="16" autocomplete="off" placeholder="Pip"></label>
+  <p class="msg-line" id="nameStatus" aria-live="polite"></p>
+  <button class="primary" id="nameSave">Let's go</button>
 </dialog>
 
 <dialog id="noteDlg">
@@ -152,7 +154,7 @@
     <p class="cert-kicker">Study Pet</p>
     <h2 id="certTitle">Certificate of Achievement</h2>
     <p class="cert-small">proudly awarded to</p>
-    <input class="cert-name" id="certName" placeholder="Your name" aria-label="Name on the certificate" maxlength="40" autocomplete="name">
+    <p class="cert-name" id="certName"></p>
     <p class="cert-for" id="certFor"></p>
     <canvas id="certPet" width="64" height="48" aria-hidden="true"></canvas>
     <dl class="cert-stats" id="certStats"></dl>

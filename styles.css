@@ -140,6 +140,7 @@ dialog .field textarea{min-height:92px;font:inherit;font-size:16px;margin-bottom
 dialog .gift-out{margin-top:18px}
 dialog .gift-out[hidden]{display:none}
 dialog .gift-out input{font-size:14px;margin-bottom:10px}
+#nameDlg .msg-line{margin:0 0 12px}
 dialog .msg-line{font-size:14px;color:var(--muted);margin:12px 0 0;min-height:1.2em}
 @media (prefers-reduced-motion: reduce){.key .dot{transition:none}}
 
@@ -169,9 +170,7 @@ dialog .msg-line{font-size:14px;color:var(--muted);margin:12px 0 0;min-height:1.
 #certDlg .cert h2{font-size:28px;line-height:1.15;margin:0 0 14px}
 #certDlg .cert p{color:var(--paper-ink)}
 #certDlg .cert-small{font-size:14px;color:var(--paper-muted);margin:0 0 4px}
-#certDlg input.cert-name{display:block;width:100%;text-align:center;font-size:26px;font-weight:600;color:var(--paper-ink);
-  background:transparent;border:0;border-bottom:2px solid var(--paper-rule);border-radius:0;padding:4px 0;margin:0 0 14px}
-#certDlg input.cert-name::placeholder{color:var(--paper-muted);font-weight:400}
+#certDlg .cert-name{font-size:26px;font-weight:600;color:var(--paper-ink);border-bottom:2px solid var(--paper-rule);padding:4px 0;margin:0 0 14px;overflow-wrap:anywhere}
 #certDlg .cert-for{font-size:16px;line-height:1.5;margin:0 0 16px}
 #certPet{display:block;width:128px;margin:0 auto 16px;image-rendering:pixelated;image-rendering:crisp-edges;background:#B9C79A;border-radius:8px}
 .cert-stats{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:10px;margin:0 0 16px}
