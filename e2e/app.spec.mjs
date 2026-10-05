@@ -176,6 +176,39 @@ test.describe("keeping progress safe", () => {
   });
 });
 
+test("keeps the screen on only while a timer runs, when the setting is on", async ({ page }) => {
+  // Record wake lock requests and releases instead of really locking the screen.
+  await page.addInitScript(() => {
+    window.wakeLog = [];
+    navigator.wakeLock.request = async () => {
+      window.wakeLog.push("on");
+      const lock = new EventTarget();
+      lock.release = async () => { window.wakeLog.push("off"); lock.dispatchEvent(new Event("release")); };
+      return lock;
+    };
+  });
+  await open(page, { save: petSave() });
+  const log = () => page.evaluate(() => window.wakeLog);
+
+  await page.getByRole("radio", { name: "15 min" }).check();
+  await page.locator("#keyFocus").click();
+  await page.clock.runFor(500);
+  expect(await log()).toEqual([]);                    // off by default
+
+  await page.locator("#awakeToggle").check();
+  await page.clock.runFor(500);
+  expect(await log()).toEqual(["on"]);                // asks once, not every tick
+
+  await page.clock.fastForward("15:01");              // session done, break starts: still on
+  await page.clock.runFor(500);
+  expect(await log()).toEqual(["on"]);
+  await page.clock.fastForward("05:01");               // break over: screen may sleep again
+  await page.clock.runFor(500);
+  expect(await log()).toEqual(["on", "off"]);
+  await page.reload();
+  await expect(page.locator("#awakeToggle")).toBeChecked();
+});
+
 test.describe("installed app", () => {
   test.use({ serviceWorkers: "allow" });
 

@@ -43,7 +43,7 @@ export function createState(now) {
     length: 25, active: null, onBreak: null,
     notes: {},
     days: {},              // minutes studied per calendar day, keyed by dayKey()
-    settings: { sound: true, notify: false, lastBackupAt: null }
+    settings: { sound: true, notify: false, awake: false, lastBackupAt: null }
   };
 }
 

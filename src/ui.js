@@ -4,7 +4,7 @@ import { PERSONAL, NOTES, LENGTHS } from "./config.js";
 import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
-import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing } from "./alerts.js";
+import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing, wakeLockSupported, keepAwake } from "./alerts.js";
 import { registerServiceWorker, watchInstall, promptInstall, isIOS, isInstalled } from "./pwa.js";
 
 const $ = id => document.getElementById(id);
@@ -294,6 +294,7 @@ LENGTHS.forEach(n => {
 function syncSettings() {
   $("soundToggle").checked = state.settings.sound;
   if (notifySupported()) $("notifyToggle").checked = state.settings.notify && Notification.permission === "granted";
+  $("awakeToggle").checked = state.settings.awake;
 }
 syncSettings();
 $("soundToggle").addEventListener("change", e => {
@@ -312,6 +313,12 @@ else {
     if (!state.settings.notify) say("Desktop alerts are blocked here, so the chime and a flashing tab title will let you know instead.");
   });
 }
+
+if (!wakeLockSupported()) $("awakeRow").hidden = true;
+$("awakeToggle").addEventListener("change", e => {
+  state.settings.awake = e.target.checked; save();
+  if (e.target.checked) say("The screen will stay on while a timer runs, so you'll hear when it's done.");
+});
 
 /* ---------- Backup and restore ---------- */
 const backupText = () => exportBackup(state, Date.now());
@@ -408,6 +415,7 @@ if (isIOS() && !isInstalled()) {
 /* ---------- Main loop ---------- */
 function tick() {
   handleEvent(tickState(state, Date.now(), NOTES));
+  keepAwake(state.settings.awake && !!(state.active || state.onBreak));
   render();
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden) stopFlash(); tick(); });

@@ -53,3 +53,24 @@ export function stopFlash() {
   if (flashTimer) { clearInterval(flashTimer); flashTimer = null; }
 }
 export const isFlashing = () => flashTimer !== null;
+
+// Keeps the screen on while a timer runs. Phones pause a web page when the
+// screen locks, so without this the chime can't play when time is up.
+// Call keepAwake() as often as you like: it only acts when `want` changes,
+// and asks again after the browser drops the lock (it does when the tab is hidden).
+export const wakeLockSupported = () => typeof navigator !== "undefined" && "wakeLock" in navigator;
+let wakeLock = null, wakePending = false;
+export function keepAwake(want) {
+  if (!wakeLockSupported()) return;
+  if (want && !wakeLock && !wakePending && !document.hidden) {
+    wakePending = true;
+    navigator.wakeLock.request("screen")
+      .then(lock => { wakeLock = lock; lock.addEventListener("release", () => { wakeLock = null; }); })
+      .catch(() => {})                       // e.g. battery saver is on: the timer still works
+      .finally(() => { wakePending = false; });
+  } else if (!want && wakeLock) {
+    wakeLock.release().catch(() => {});
+    wakeLock = null;
+  }
+}
+export const isAwake = () => wakeLock !== null;
