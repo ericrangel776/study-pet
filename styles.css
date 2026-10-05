@@ -100,6 +100,7 @@ main{max-width:940px;margin:0 auto;padding:44px 20px 56px;display:grid;
 .note-btn{width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;
   background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:9px 14px;cursor:pointer;font-weight:500}
 .note-btn .new{font-size:13px;background:var(--btn);color:#2A2440;border-radius:999px;padding:1px 9px}
+.notes-links{display:flex;flex-wrap:wrap;gap:8px 18px;margin:-12px 0 24px;font-size:15px}
 .locked{display:block;border:1px dashed var(--line);border-radius:14px;padding:9px 14px;color:var(--muted)}
 
 .tools{display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:15px}
@@ -132,5 +133,12 @@ dialog textarea{width:100%;min-height:120px;font:13px/1.4 ui-monospace,Menlo,Con
 dialog .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
 dialog .row [hidden]{display:none}
 dialog .file{margin:0 0 12px;font-size:15px}
+dialog{max-height:calc(100dvh - 32px);overflow:auto}
+dialog .field{display:block;margin:0 0 4px}
+dialog .field span{display:block;font-weight:500;margin-bottom:6px;font-size:15px}
+dialog .field textarea{min-height:92px;font:inherit;font-size:16px;margin-bottom:12px}
+dialog .gift-out{margin-top:18px}
+dialog .gift-out[hidden]{display:none}
+dialog .gift-out input{font-size:14px;margin-bottom:10px}
 dialog .msg-line{font-size:14px;color:var(--muted);margin:12px 0 0;min-height:1.2em}
 @media (prefers-reduced-motion: reduce){.key .dot{transition:none}}

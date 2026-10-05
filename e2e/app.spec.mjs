@@ -91,9 +91,92 @@ test("notes unlock, open, and lose their New badge", async ({ page }) => {
   const note = page.locator(".note-btn", { hasText: "Hatch the egg" });
   await expect(note).toContainText("New");
   await note.click();
-  await expect(page.locator("#noteText")).toContainText("You hatched it!");
+  await expect(page.locator("#noteText")).toContainText("You hatched me!");
   await page.locator("#noteDlg [data-close]").click();
   await expect(note).not.toContainText("New");
+});
+
+test.describe("notes for a friend", () => {
+  // Write notes in one browser, then open the link in a fresh one, like a friend would.
+  async function writeNotes(page, from, notes) {
+    await page.locator("#giftOpen").click();
+    if (from !== null) await page.locator("#giftFrom").fill(from);
+    for (const [id, text] of Object.entries(notes)) await page.locator(`#giftFields textarea[data-note="${id}"]`).fill(text);
+    await page.locator("#giftMake").click();
+  }
+
+  test("a friend's link brings their notes to a new pet", async ({ page, browser }) => {
+    await open(page, { save: petSave() });
+    await expect(page.locator("#notesTitle")).toHaveText("Notes from Pip");   // the pet's own notes by default
+    await writeNotes(page, "Eric", { hatch: "So proud of you! 🎉", five: "Five down!" });
+    await expect(page.locator("#giftStatus")).toContainText("2 of 6 notes");
+    const link = await page.locator("#giftLink").inputValue();
+    expect(link).toMatch(/#gift=[\w-]+$/);
+
+    const friend = await browser.newPage();
+    await friend.clock.install({ time: MORNING });
+    await friend.goto(link);
+    await expect(friend.locator("#msg")).toContainText("Eric left you 2 notes");
+    expect(friend.url()).not.toContain("#gift");                              // removed from the address bar
+    await nameThePet(friend, "Bo");
+    await expect(friend.locator("#notesTitle")).toHaveText("Notes from Eric");
+
+    await friend.getByRole("radio", { name: "15 min" }).check();
+    await friend.locator("#keyFocus").click();
+    await friend.clock.fastForward("15:01");
+    await expect(friend.locator("#msg")).toContainText("You unlocked a note from Eric");
+    await friend.locator(".note-btn", { hasText: "Hatch the egg" }).click();
+    await expect(friend.locator("#noteTitle")).toHaveText("A note from Eric");
+    await expect(friend.locator("#noteText")).toHaveText("So proud of you! 🎉");
+    await friend.close();
+  });
+
+  test("a pet with progress asks before switching notes", async ({ page }) => {
+    await open(page, { save: petSave({ notes: { hatch: { at: 1, read: true } } }) });
+    await writeNotes(page, "Sam", { hatch: "Hi from Sam" });
+    const link = await page.locator("#giftLink").inputValue();
+    await page.locator("#giftDlg [data-close]").click();
+
+    await page.goto(link);
+    await expect(page.locator("#giftGotTitle")).toHaveText("Sam wrote you notes");
+    await page.locator("#giftAccept").click();
+    await expect(page.locator("#notesTitle")).toHaveText("Notes from Sam");
+    await expect(page.locator(".note-btn", { hasText: "Hatch the egg" })).toContainText("New");   // rewritten, so new again
+  });
+
+  test("the builder needs a name and at least one note", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await writeNotes(page, null, { hatch: "Hello" });
+    await expect(page.locator("#giftStatus")).toHaveText("Add your name so they know who the notes are from.");
+    await page.locator("#giftFrom").fill("Eric");
+    await page.locator('#giftFields textarea[data-note="hatch"]').fill("   ");
+    await page.locator("#giftMake").click();
+    await expect(page.locator("#giftStatus")).toHaveText("Write at least one note.");
+    await expect(page.locator("#giftOut")).toBeHidden();
+  });
+
+  test("a notes link can be pasted in, for apps a link can't open", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await writeNotes(page, "Ana", { five: "Cinco!" });
+    const link = await page.locator("#giftLink").inputValue();
+    await page.locator("#giftDlg [data-close]").click();
+
+    await page.locator("#giftPasteOpen").click();
+    await page.locator("#giftPasteInput").fill("hello");
+    await page.locator("#giftPasteGo").click();
+    await expect(page.locator("#giftPasteStatus")).toContainText("isn't a notes link");
+    await page.locator("#giftPasteInput").fill(`Check this out: ${link}`);
+    await page.locator("#giftPasteGo").click();
+    await page.locator("#giftAccept").click();
+    await expect(page.locator("#notesTitle")).toHaveText("Notes from Ana");
+  });
+
+  test("a damaged link explains itself and changes nothing", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await page.goto("./#gift=eyJ2IjoxLCJmcm9tIjoiRX");
+    await expect(page.locator("#msg")).toContainText("This notes link looks incomplete");
+    await expect(page.locator("#notesTitle")).toHaveText("Notes from Pip");
+  });
 });
 
 test("a backup restores the pet after starting over", async ({ page }) => {

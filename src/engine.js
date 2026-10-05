@@ -42,6 +42,7 @@ export function createState(now) {
     streak: 0, lastDay: null, lastStudyAt: null,
     length: 25, active: null, onBreak: null,
     notes: {},
+    gift: null,            // notes a friend wrote: { from, notes: { noteId: text } }
     days: {},              // minutes studied per calendar day, keyed by dayKey()
     settings: { sound: true, notify: false, awake: false, lastBackupAt: null }
   };
@@ -54,6 +55,7 @@ export function migrate(raw, now) {
   if (!raw || typeof raw !== "object") return createState(now);
   const s = Object.assign(createState(now), raw);
   s.notes = raw.notes && typeof raw.notes === "object" ? raw.notes : {};
+  s.gift = cleanGift(raw.gift);
   s.days = {};
   if (raw.days && typeof raw.days === "object")
     for (const [k, v] of Object.entries(raw.days)) if (Number.isFinite(v) && v > 0) s.days[k] = v;
@@ -173,6 +175,53 @@ export function unlockNotes(s, now, notesList) {
 export function unreadNotes(s, notesList) {
   return notesList.filter(n => s.notes[n.id] && !s.notes[n.id].read).length;
 }
+
+/* ---------- Notes from a friend ---------- */
+// Anyone can write their own text for the milestone notes and share it as a
+// link. The notes ride in the link's #fragment, which browsers never send to
+// the server, so they stay between the two people.
+export const GIFT_LIMITS = { from: 24, note: 280 };
+
+// Keep only a name and non-empty notes, trimmed to the limits. With `notesList`,
+// only notes for real milestones are kept. Returns null if nothing usable is left.
+export function cleanGift(raw, notesList) {
+  if (!raw || typeof raw !== "object" || !raw.notes || typeof raw.notes !== "object") return null;
+  const from = typeof raw.from === "string" ? raw.from.trim().slice(0, GIFT_LIMITS.from) : "";
+  const ids = notesList ? notesList.map(n => n.id) : Object.keys(raw.notes).slice(0, 20);
+  const notes = {};
+  ids.forEach(id => {
+    const t = raw.notes[id];
+    if (typeof t === "string" && t.trim()) notes[id] = t.trim().slice(0, GIFT_LIMITS.note);
+  });
+  return from && Object.keys(notes).length ? { from, notes } : null;
+}
+
+// Gift <-> link-safe text (base64url of UTF-8 JSON, so any language and emoji work).
+export function encodeGift(gift) {
+  const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, from: gift.from, notes: gift.notes }));
+  let bin = "";
+  bytes.forEach(b => { bin += String.fromCharCode(b); });
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+export function decodeGift(code, notesList) {
+  let raw = null;
+  try {
+    const bin = atob(code.replace(/-/g, "+").replace(/_/g, "/"));
+    raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+  } catch (e) { raw = null; }
+  const gift = cleanGift(raw, notesList);
+  if (!gift) throw new Error("This notes link looks incomplete. Ask for the link again and copy all of it.");
+  return gift;
+}
+export const sameGift = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+
+// Switch to a friend's notes. Unlocked notes they rewrote show as new again,
+// so the new words get read.
+export function applyGift(s, gift) {
+  s.gift = gift;
+  Object.keys(gift.notes).forEach(id => { if (s.notes[id]) s.notes[id].read = false; });
+}
+export const noteText = (s, n) => (s.gift && s.gift.notes[n.id]) || n.text;
 
 /* ---------- Backup ---------- */
 // Nudge for a backup when there's progress to lose, nothing promises to keep it

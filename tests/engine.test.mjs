@@ -222,6 +222,44 @@ test("a backup nudge appears only when progress could be lost", () => {
   assert.equal(E.needsBackup(s, now, false), true);                // 7 days ago
 });
 
+test("a friend's notes survive the trip through a link, in any language", () => {
+  const gift = { from: "Eric", notes: { hatch: "You did it! 🎉", streak3: "¡Tres días seguidos!" } };
+  const code = E.encodeGift(gift);
+  assert.match(code, /^[A-Za-z0-9_-]+$/);                  // safe to put in a URL as-is
+  assert.deepEqual(E.decodeGift(code, NOTES), gift);
+});
+
+test("a damaged or empty notes link is rejected", () => {
+  const good = E.encodeGift({ from: "Eric", notes: { hatch: "Hi" } });
+  for (const bad of ["", "abc", good.slice(0, -6), E.encodeGift({ from: "", notes: { hatch: "Hi" } }),
+                     E.encodeGift({ from: "Eric", notes: { hatch: "   " } })]) {
+    assert.throws(() => E.decodeGift(bad, NOTES), /looks incomplete/, JSON.stringify(bad));
+  }
+});
+
+test("gift notes are trimmed to the limits and unknown milestones are dropped", () => {
+  const raw = { from: "  " + "E".repeat(40), notes: { hatch: "x".repeat(400), made_up: "hello" } };
+  const gift = E.cleanGift(raw, NOTES);
+  assert.equal(gift.from.length, E.GIFT_LIMITS.from);
+  assert.equal(gift.notes.hatch.length, E.GIFT_LIMITS.note);
+  assert.equal(gift.notes.made_up, undefined);
+});
+
+test("using a friend's notes swaps the text and marks rewritten notes as new", () => {
+  const s = E.createState(at(2026, 10, 1));
+  finishSession(s, at(2026, 10, 1, 10));
+  s.notes.hatch.read = true;
+  const hatch = NOTES.find(n => n.id === "hatch"), five = NOTES.find(n => n.id === "five");
+  assert.equal(E.noteText(s, hatch), hatch.text);
+
+  E.applyGift(s, { from: "Eric", notes: { hatch: "Proud of you!" } });
+  assert.equal(E.noteText(s, hatch), "Proud of you!");
+  assert.equal(E.noteText(s, five), five.text);            // blank notes fall back to the pet's own
+  assert.equal(s.notes.hatch.read, false);
+  const restored = E.importBackup(E.exportBackup(s, at(2026, 10, 1, 11)), at(2026, 10, 2));
+  assert.deepEqual(restored.gift, s.gift);                 // backups keep the friend's notes
+});
+
 test("days ago counts calendar days, not 24-hour periods", () => {
   assert.equal(E.daysAgo(at(2026, 10, 5, 9), at(2026, 10, 5, 22)), 0);
   assert.equal(E.daysAgo(at(2026, 10, 4, 23), at(2026, 10, 5, 9)), 1);
