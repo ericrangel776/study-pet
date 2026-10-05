@@ -20,3 +20,6 @@ export const NOTES = [
 ];
 
 export const LENGTHS = [15, 25, 45, 60];
+
+// A little surprise: a pet given one of these names (any capitalization) hatches as a puppy.
+export const DOG_NAMES = ["lila", "daisy"];

@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
-import { NOTES, LENGTHS } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, GIFT_LIMITS, cleanGift, encodeGift, decodeGift, sameGift, applyGift, noteText } from "./engine.js";
+import { NOTES, LENGTHS, DOG_NAMES } from "./config.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, GIFT_LIMITS, cleanGift, encodeGift, decodeGift, sameGift, applyGift, noteText, isPuppy } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing, wakeLockSupported, keepAwake } from "./alerts.js";
@@ -109,7 +109,7 @@ function renderNotes() {
 function render() {
   const now = Date.now(), m = mood(state, now), st = stageIndex(state);
   const unread = unreadNotes(state, NOTES);
-  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, rm: RM });
+  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, rm: RM, dog: isPuppy(state, DOG_NAMES) });
   canvas.setAttribute("aria-label", `${nameOr()}, ${STAGES[st].name}, ${MOOD_TEXT[m].toLowerCase()}${unread ? ", new note waiting" : ""}`);
 
   let title = "Study Pet";

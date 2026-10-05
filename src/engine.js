@@ -90,6 +90,9 @@ export function mood(s, now) {
   if (h === 1) return "hungry";
   return "happy";
 }
+export function isPuppy(s, dogNames) {
+  return dogNames.includes(s.name.trim().toLowerCase());
+}
 export function breakLength(sessions) {
   return sessions % LONG_EVERY === 0 ? LONG_BREAK : SHORT_BREAK;
 }
