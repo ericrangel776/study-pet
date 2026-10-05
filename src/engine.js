@@ -44,7 +44,7 @@ export function createState(now) {
     certName: "", certSeen: false,
     length: 25, active: null, onBreak: null,
     notes: {},
-    gift: null,            // notes a friend wrote: { from, notes: { noteId: text } }
+    invite: null,          // extras from the person who invited them (see Invites below)
     days: {},              // minutes studied per calendar day, keyed by dayKey()
     settings: { sound: true, notify: false, awake: false, lastBackupAt: null }
   };
@@ -57,7 +57,7 @@ export function migrate(raw, now) {
   if (!raw || typeof raw !== "object") return createState(now);
   const s = Object.assign(createState(now), raw);
   s.notes = raw.notes && typeof raw.notes === "object" ? raw.notes : {};
-  s.gift = cleanGift(raw.gift);
+  s.invite = cleanInvite(raw.invite);
   // Saves from before the certificate: the best streak is at least the current one,
   // and an already grown pet counts as grown at its last session.
   s.bestStreak = Math.max(Number.isFinite(raw.bestStreak) ? raw.bestStreak : 0, Number.isFinite(raw.streak) ? raw.streak : 0);
@@ -98,9 +98,11 @@ export function mood(s, now) {
   if (h === 1) return "hungry";
   return "happy";
 }
+// A puppy if the name is one of the dog names, or the invite made it one.
 export function isPuppy(s, dogNames) {
-  return dogNames.includes(s.name.trim().toLowerCase());
+  return dogNames.includes(s.name.trim().toLowerCase()) || !!(s.invite && s.invite.puppy);
 }
+export const accessory = s => (s.invite && s.invite.accessory) || null;
 export function breakLength(sessions) {
   return sessions % LONG_EVERY === 0 ? LONG_BREAK : SHORT_BREAK;
 }
@@ -203,52 +205,69 @@ export function certificate(s, notesList) {
   };
 }
 
-/* ---------- Notes from a friend ---------- */
-// Anyone can write their own text for the milestone notes and share it as a
-// link. The notes ride in the link's #fragment, which browsers never send to
-// the server, so they stay between the two people.
-export const GIFT_LIMITS = { from: 24, note: 280 };
+/* ---------- Invites ---------- */
+// An invite link brings someone to the app with extras chosen by the sender:
+// a welcome card, a P.S. under any milestone note, a message sealed inside the
+// certificate, and gifts for the pet. It all rides in the link's #fragment,
+// which browsers never send to the server, so it stays between the two people.
+export const INVITE_LIMITS = { name: 24, welcome: 280, ps: 200, letter: 400 };
+export const ACCESSORIES = ["bow", "flower", "hat"];
 
-// Keep only a name and non-empty notes, trimmed to the limits. With `notesList`,
-// only notes for real milestones are kept. Returns null if nothing usable is left.
-export function cleanGift(raw, notesList) {
-  if (!raw || typeof raw !== "object" || !raw.notes || typeof raw.notes !== "object") return null;
-  const from = typeof raw.from === "string" ? raw.from.trim().slice(0, GIFT_LIMITS.from) : "";
-  const ids = notesList ? notesList.map(n => n.id) : Object.keys(raw.notes).slice(0, 20);
-  const notes = {};
-  ids.forEach(id => {
-    const t = raw.notes[id];
-    if (typeof t === "string" && t.trim()) notes[id] = t.trim().slice(0, GIFT_LIMITS.note);
+// Keep only known fields, trimmed to the limits. With `notesList`, only P.S.
+// lines for real milestones are kept. Returns null without a sender's name.
+export function cleanInvite(raw, notesList) {
+  if (!raw || typeof raw !== "object") return null;
+  const text = (v, max) => (typeof v === "string" ? v.trim().slice(0, max) : "");
+  const from = text(raw.from, INVITE_LIMITS.name);
+  if (!from) return null;
+  const ps = {}, given = raw.ps && typeof raw.ps === "object" ? raw.ps : {};
+  (notesList ? notesList.map(n => n.id) : Object.keys(given).slice(0, 20)).forEach(id => {
+    const t = text(given[id], INVITE_LIMITS.ps);
+    if (t) ps[id] = t;
   });
-  return from && Object.keys(notes).length ? { from, notes } : null;
+  return {
+    from, to: text(raw.to, INVITE_LIMITS.name), welcome: text(raw.welcome, INVITE_LIMITS.welcome),
+    ps, letter: text(raw.letter, INVITE_LIMITS.letter),
+    puppy: raw.puppy === true, accessory: ACCESSORIES.includes(raw.accessory) ? raw.accessory : null
+  };
 }
 
-// Gift <-> link-safe text (base64url of UTF-8 JSON, so any language and emoji work).
-export function encodeGift(gift) {
-  const bytes = new TextEncoder().encode(JSON.stringify({ v: 1, from: gift.from, notes: gift.notes }));
+// Invite <-> link-safe text: base64url of UTF-8 JSON (any language and emoji
+// work), with short keys and empty fields left out to keep links short.
+const KEYS = [["from", "f"], ["to", "t"], ["welcome", "w"], ["ps", "p"], ["letter", "l"], ["puppy", "d"], ["accessory", "a"]];
+export function encodeInvite(inv) {
+  const short = { v: 2 };
+  KEYS.forEach(([k, s]) => {
+    const val = inv[k];
+    if (val && !(typeof val === "object" && !Object.keys(val).length)) short[s] = val;
+  });
+  const bytes = new TextEncoder().encode(JSON.stringify(short));
   let bin = "";
   bytes.forEach(b => { bin += String.fromCharCode(b); });
   return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
-export function decodeGift(code, notesList) {
+export function decodeInvite(code, notesList) {
   let raw = null;
   try {
     const bin = atob(code.replace(/-/g, "+").replace(/_/g, "/"));
-    raw = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+    const short = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+    raw = {};
+    KEYS.forEach(([k, s]) => { raw[k] = short[s]; });
   } catch (e) { raw = null; }
-  const gift = cleanGift(raw, notesList);
-  if (!gift) throw new Error("This notes link looks incomplete. Ask for the link again and copy all of it.");
-  return gift;
+  const inv = cleanInvite(raw, notesList);
+  if (!inv) throw new Error("This invite link looks incomplete. Ask for the link again and copy all of it.");
+  return inv;
 }
-export const sameGift = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+export const sameInvite = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-// Switch to a friend's notes. Unlocked notes they rewrote show as new again,
-// so the new words get read.
-export function applyGift(s, gift) {
-  s.gift = gift;
-  Object.keys(gift.notes).forEach(id => { if (s.notes[id]) s.notes[id].read = false; });
+// Accept an invite. Unlocked notes that gained a P.S. show as new again, and
+// the certificate gets the invited person's name if it doesn't have one.
+export function applyInvite(s, inv) {
+  s.invite = inv;
+  Object.keys(inv.ps).forEach(id => { if (s.notes[id]) s.notes[id].read = false; });
+  if (!s.certName && inv.to) s.certName = inv.to;
 }
-export const noteText = (s, n) => (s.gift && s.gift.notes[n.id]) || n.text;
+export const notePS = (s, n) => (s.invite && s.invite.ps[n.id]) || "";
 
 /* ---------- Backup ---------- */
 // Nudge for a backup when there's progress to lose, nothing promises to keep it
