@@ -178,6 +178,13 @@ test("a backup restores the same progress", () => {
   assert.equal(restored.onBreak, null);
 });
 
+test("days ago counts calendar days, not 24-hour periods", () => {
+  assert.equal(E.daysAgo(at(2026, 10, 5, 9), at(2026, 10, 5, 22)), 0);
+  assert.equal(E.daysAgo(at(2026, 10, 4, 23), at(2026, 10, 5, 9)), 1);
+  assert.equal(E.daysAgo(at(2026, 3, 7, 12), at(2026, 3, 9, 12)), 2);    // across spring forward
+  assert.equal(E.daysAgo(at(2026, 10, 31, 12), at(2026, 11, 2, 12)), 2); // across fall back
+});
+
 test("anything that isn't a backup is rejected", () => {
   for (const bad of ["", "hello", "{}", '{"app":"study-pet","data":{"sessions":"lots"}}', "[1,2,3]"]) {
     assert.throws(() => E.importBackup(bad, 0), /doesn't look like/);

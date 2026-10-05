@@ -27,8 +27,15 @@ Requires Node.js 20 or newer.
 - `npm run dev` serves the project locally. Open the address it prints.
   (ES modules don't load from a double-clicked file, so the unbundled version needs a local server.)
 
+## Live site
+
+https://ericrangel776.github.io/study-pet/
+
+Every push to `main` runs the tests, builds `dist/study-pet.html` and publishes it to GitHub Pages
+(see `.github/workflows/pages.yml`). If the tests fail, the site isn't updated.
+
 ## Tips
 
-- Press **T** in the app to switch to test mode, where sessions last seconds instead of minutes.
+- Press **T** in the app to switch to test mode, where sessions last seconds instead of minutes. Nothing done in test mode is saved, and pressing **T** again returns to your real progress.
 - Edit `src/config.js` to change the notes before sharing.
 - Run `npm test` before every commit.
