@@ -269,3 +269,7 @@ dialog details.ps-block textarea{min-height:64px}
   padding:calc(env(safe-area-inset-top,0px) + 10px) 16px 10px;background:var(--ink);color:var(--bg);font-weight:500}
 .update-banner[hidden]{display:none}
 .update-banner .primary{background:var(--btn);color:#2A2440;padding:6px 16px}
+
+/* Dedication */
+.dedication-note{text-align:center;font-size:14px;color:var(--muted);padding:0 16px calc(env(safe-area-inset-bottom,0px) + 28px)}
+@media print{.dedication-note{display:none}}
