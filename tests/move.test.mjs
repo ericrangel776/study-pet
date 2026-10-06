@@ -24,7 +24,7 @@ function scan(matrix) {
 function busySave() {
   const s = E.createState(Date.UTC(2026, 0, 1), () => 0.5);
   s.name = "Mochi"; s.userName = "Riley"; s.sessions = 14; s.minutes = 390;
-  for (let i = 0; i < 3; i++) s.album.push({ earned: true, name: "Pet " + i, seed: 1000 + i, accessory: null, sessions: 20, minutes: 520,
+  for (let i = 0; i < 3; i++) s.album.push({ earned: true, name: "Pet " + i, seed: 1000 + i, traits: {}, accessory: null, sessions: 20, minutes: 520,
     bestStreak: 6, notes: 6, totalNotes: 6, since: 1e12, grownAt: 1.0017e12, letter: "", letterFrom: "" });
   for (let d = 1; d <= 120; d++) s.days[`2026-${1 + Math.floor(d / 31)}-${1 + d % 28}`] = 25 + (d % 4) * 15;
   s.invite = E.cleanInvite({ from: "Jamie", to: "Riley", welcome: "Hi!", ps: { hatch: "Proud of you" }, letter: "Dinner's on me." }, NOTES);
