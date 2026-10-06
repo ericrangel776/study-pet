@@ -239,3 +239,8 @@ dialog details.ps-block textarea{min-height:64px}
 .share-pet{margin:-8px 0 16px;font-size:15px}
 .card-preview{display:block;width:100%;aspect-ratio:1080/1350;border-radius:14px;border:1px solid var(--line);margin:0 0 16px;background:#EEEAF8}
 #cardDlg .row [hidden]{display:none}
+
+/* Moving to another device */
+.move-qr{display:block;width:min(280px,100%);margin:0 auto 14px;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:12px}
+#moveDlg .hint{margin:0 0 14px}
+.move-qr[hidden]{display:none}

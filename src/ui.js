@@ -5,6 +5,8 @@ import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, s
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { drawCard } from "./card.js";
+import { qrEncode, QR_MAX_BYTES } from "./qr.js";
+import { encodeMove, decodeMove } from "./move.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing, wakeLockSupported, keepAwake } from "./alerts.js";
 import { registerServiceWorker, watchInstall, promptInstall, isIOS, isInstalled } from "./pwa.js";
 
@@ -695,11 +697,69 @@ $("invPasteOpen").addEventListener("click", () => {
   show($("invPasteDlg")); $("invPasteInput").focus();
 });
 $("invPasteGo").addEventListener("click", () => {
-  const m = $("invPasteInput").value.match(/#invite=([\w-]+)/);
-  if (!m) { $("invPasteStatus").textContent = "That isn't an invite link. It should contain #invite="; return; }
+  const m = $("invPasteInput").value.match(/#(invite|move)=([\w-]+)/);
+  if (!m) { $("invPasteStatus").textContent = "That isn't a Study Pet invite or move link."; return; }
   hide($("invPasteDlg"));
-  location.hash = "invite=" + m[1];   // the hashchange listener takes it from here
+  location.hash = m[1] + "=" + m[2];   // the hashchange listeners take it from here
 });
+
+/* ---------- Moving to another device ---------- */
+let moveLink = "";
+function drawQR(canvas, matrix) {
+  const border = 4, n = matrix.length + border * 2, scale = Math.max(2, Math.floor(560 / n));
+  canvas.width = canvas.height = n * scale;
+  const g = canvas.getContext("2d");
+  g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, canvas.width, canvas.height);
+  g.fillStyle = "#000000";
+  matrix.forEach((row, y) => row.forEach((dark, x) => { if (dark) g.fillRect((x + border) * scale, (y + border) * scale, scale, scale); }));
+}
+async function openMove() {
+  $("moveStatus").textContent = "";
+  moveLink = `${location.origin}${location.pathname}#move=${await encodeMove(state)}`;
+  const bytes = new TextEncoder().encode(moveLink), fits = bytes.length <= QR_MAX_BYTES;
+  if (fits) drawQR($("moveQR"), qrEncode(bytes));
+  $("moveQR").hidden = !fits;
+  $("moveLead").textContent = fits
+    ? `Scan this with the other device's camera to open Study Pet there with ${nameOr()}.`
+    : `${nameOr()} has too much history to fit in a code. Copy the link and open it on the other device.`;
+  show($("moveDlg"));
+}
+$("moveBtn").addEventListener("click", openMove);
+$("moveCopy").addEventListener("click", async () => {
+  let ok = false;
+  try { await navigator.clipboard.writeText(moveLink); ok = true; } catch (e) { ok = false; }
+  $("moveStatus").textContent = ok ? "Copied. Open it on the other device, or paste it there with \"Paste a link\"." : "Copying didn't work here. Use Back up progress instead.";
+});
+
+// Receiving: open the app with #move=... and confirm before replacing anything.
+let pendingMove = null;
+async function receiveMove() {
+  const m = location.hash.match(/^#move=([\w-]+)/);
+  if (!m) return;
+  history.replaceState(null, "", location.pathname + location.search);   // the link holds the whole pet; keep it out of history
+  if (testMode) { say("Leave test mode (press T), then open the move link again."); return; }
+  try { pendingMove = importBackup(await decodeMove(m[1]), Date.now()); }
+  catch (e) { say(e.message); if (!state.name || !state.userName) openName(); return; }
+  const p = pendingMove, here = state.sessions || state.album.length;
+  $("moveAskTitle").textContent = `Move ${p.name || "a pet"} here?`;
+  $("moveAskText").textContent = `${p.name || "The pet"} has ${p.sessions} ${p.sessions === 1 ? "session" : "sessions"}`
+    + (p.album.length ? `, with ${p.album.length} more in the album` : "") + (p.userName ? `, raised by ${p.userName}` : "") + "."
+    + (here ? ` This replaces ${nameOr()} on this device.` : "");
+  show($("moveAskDlg"));
+}
+$("moveAccept").addEventListener("click", () => {
+  if (pendingMove) {
+    state = pendingMove; save();
+    notesSig = ""; albumSig = ""; weekSig = "";
+    syncSettings();
+    say(`${nameOr()} moved over with all your progress. Welcome back, ${state.userName || "friend"}!`);
+  }
+  pendingMove = null;
+  hide($("moveAskDlg"));
+  render();
+});
+$("moveAskDlg").addEventListener("close", () => { pendingMove = null; if (!state.name || !state.userName) openName(); });
+window.addEventListener("hashchange", receiveMove);
 
 /* ---------- Installing ---------- */
 registerServiceWorker();
@@ -726,8 +786,10 @@ save();
 protectProgress();
 setInterval(tick, 100);
 tick();
+const arrivingMove = location.hash.startsWith("#move=");   // checked first: receiving clears the address
 receiveInvite();
-if (!$("welcomeDlg").open && !$("invAskDlg").open) {
+receiveMove();   // asks first; if there's no pet here yet, the name prompt comes after
+if (!$("welcomeDlg").open && !$("invAskDlg").open && !arrivingMove) {
   if (!state.name || !state.userName) openName();
   else if (!$("msg").textContent) say(`Hi, ${state.userName}! ${nameOr()} is ready when you are.`);
 }

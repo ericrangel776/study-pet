@@ -12,11 +12,14 @@ src/
   storage.js   Saving and loading behind a load()/save() interface
   render.js    Draws the LCD screen on a canvas
   card.js      Draws the shareable 1080x1350 picture of the pet
+  qr.js        A small QR code encoder (byte mode, levels 1 to 40)
+  move.js      Packs the whole save into a compressed link for moving devices
   alerts.js    Chime, desktop notifications, flashing tab title
   pwa.js       Service worker registration and the install button
   ui.js        Connects everything to the page
 tests/
   engine.test.mjs   Tests for the engine
+  move.test.mjs     Tests for move links and QR codes (read back with jsQR)
 e2e/
   app.spec.mjs      Browser tests for the built app (Playwright)
 scripts/
@@ -71,4 +74,7 @@ After the first visit, the app opens without an internet connection.
   A pet named Lila or Daisy is a puppy (`DOG_NAMES` in `src/config.js`).
 - The certificate unseals when the pet is fully grown (20 sessions) and can be printed or saved as a PDF.
   After that, **Raise a new pet** moves the grown pet into the Album (with its certificate) and brings a new egg.
+- **Move to another device** (Settings) shows a QR code; scanning it opens the app there and moves the pet
+  after confirming. "Copy link" and "Paste a link" cover devices that can't scan, like moving between
+  Safari and the Home Screen app on iPhone.
 - Run `npm test` and `npm run test:browser` before every commit.
