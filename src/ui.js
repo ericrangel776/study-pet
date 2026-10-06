@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { NOTES, LENGTHS, DOG_NAMES } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, newFeature, describeLook } from "./engine.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, newFeature, describeLook, startNewPet, lifetime } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing, wakeLockSupported, keepAwake } from "./alerts.js";
@@ -142,8 +142,9 @@ function render() {
   $("dedication").textContent = inv ? (inv.to ? `For ${inv.to}, from ${inv.from}` : `Invited by ${inv.from}`) : "";
   $("dedication").hidden = !inv;
   $("stStreak").textContent = streakNow(state, now);
-  $("stSessions").textContent = state.sessions;
-  $("stTime").textContent = fmtMinutes(state.minutes);
+  const total = lifetime(state);   // across every pet raised
+  $("stSessions").textContent = total.sessions;
+  $("stTime").textContent = fmtMinutes(total.minutes);
   const nx = STAGES[st + 1], left = nx ? nx.at - state.sessions : 0;
   $("next").textContent = nx
     ? (st === 0 ? "One finished session hatches the egg."
@@ -157,6 +158,7 @@ function render() {
   renderNotes();
   renderWeek(now);
   renderSeal();
+  renderAlbum();
 }
 
 /* ---------- Certificate ---------- */
@@ -165,6 +167,7 @@ function renderSeal() {
   const c = certificate(state, NOTES);
   $("sealLocked").hidden = c.earned;
   $("sealOpen").hidden = !c.earned;
+  $("sealNewPet").hidden = !c.earned;
   if (c.earned) { $("sealNew").hidden = state.certSeen; return; }
   $("sealHint").textContent = `Opens when ${nameOr()} is fully grown` + (state.invite && state.invite.letter ? `. ${state.invite.from} left a message inside.` : "");
   $("sealFill").style.width = (c.progress / c.goal * 100) + "%";
@@ -174,8 +177,19 @@ function renderSeal() {
 }
 
 const longDate = t => new Date(t).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-function openCertificate() {
-  const c = certificate(state, NOTES), pet = nameOr();
+const shortDate = t => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
+
+// The grown pet from a certificate (or album entry), standing still, on any canvas.
+function drawPortrait(canvas, c) {
+  const pet = { name: c.name, seed: c.seed };
+  draw(canvas.getContext("2d"), { now: 1300, mood: "happy", stage: STAGES.length - 1, hearts: 0, unread: 0,
+    hatchAt: -1e12, growAt: -1e12, patAt: -1e12, rm: true, portrait: true,
+    dog: isPuppy(pet, DOG_NAMES), accessory: c.accessory, look: petLook(pet) });
+}
+
+// Shows a certificate: the current pet's, or one from the album.
+function openCertificate(c) {
+  const pet = c.name || "Your pet", puppy = isPuppy({ name: c.name }, DOG_NAMES);
   $("certName").textContent = state.userName;
   $("certFor").textContent = c.since
     ? `for raising ${pet} from an egg to a grown-up, one focus session at a time, from ${longDate(c.since)} to ${longDate(c.grownAt)}.`
@@ -188,20 +202,66 @@ function openCertificate() {
     dt.textContent = label; dd.textContent = value;
     div.append(dt, dd); $("certStats").appendChild(div);
   });
-  $("certSigned").textContent = `Signed, ${pet}${isPuppy(state, DOG_NAMES) ? " (woof!)" : ""}`;
-  const letter = state.invite && state.invite.letter;
-  $("certMsg").textContent = letter ? `“${letter}”
-From ${state.invite.from}` : "";
-  $("certMsg").hidden = !letter;
-  draw($("certPet").getContext("2d"), { now: 1300, mood: "happy", stage: STAGES.length - 1, hearts: 0, unread: 0,
-    hatchAt: -1e12, growAt: -1e12, patAt: -1e12, rm: true, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state), portrait: true });
-  $("certLook").textContent = describeLook(petLook(state), isPuppy(state, DOG_NAMES));
-  state.certSeen = true; save();
+  $("certSigned").textContent = `Signed, ${pet}${puppy ? " (woof!)" : ""}`;
+  $("certMsg").textContent = c.letter ? `“${c.letter}”\nFrom ${c.letterFrom}` : "";
+  $("certMsg").hidden = !c.letter;
+  drawPortrait($("certPet"), c);
+  $("certLook").textContent = describeLook(petLook({ seed: c.seed }), puppy);
+  const current = c.seed === state.seed && !state.album.includes(c);
+  $("certNewPet").hidden = !current;                 // only the current pet can move into the album
+  if (current) { state.certSeen = true; save(); }
   show($("certDlg"));
   render();
 }
-$("sealOpen").addEventListener("click", openCertificate);
+$("sealOpen").addEventListener("click", () => openCertificate(certificate(state, NOTES)));
 $("certPrint").addEventListener("click", () => window.print());
+
+/* ---------- Album ---------- */
+// A new egg: the grown pet moves into the album, keeping its certificate.
+function openNewPet() {
+  $("newPetLead").textContent = `${nameOr()} moves into your album, certificate and all. A new egg arrives with its own look.`;
+  $("newPetName").value = "";
+  hide($("certDlg"));
+  show($("newPetDlg"));
+  $("newPetName").focus();
+}
+function hatchNewPet() {
+  if (!state.grownAt) return;
+  const old = nameOr(), name = $("newPetName").value.trim() || "Pip";
+  startNewPet(state, name, Date.now(), NOTES);
+  save(); hide($("newPetDlg")); notesSig = ""; albumSig = "";
+  say(`${old} is in your album now. Say hello to ${name}, your ${ordinal(state.album.length + 1)} pet! One finished session hatches the egg.`);
+  render();
+}
+const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
+$("sealNewPet").addEventListener("click", openNewPet);
+$("certNewPet").addEventListener("click", openNewPet);
+$("newPetGo").addEventListener("click", hatchNewPet);
+$("newPetName").addEventListener("keydown", e => { if (e.key === "Enter") hatchNewPet(); });
+
+let albumSig = "";
+function renderAlbum() {
+  const sig = JSON.stringify(state.album.map(e => e.seed));
+  if (sig === albumSig) return;
+  albumSig = sig;
+  $("album").hidden = !state.album.length;
+  const ul = $("albumList");
+  ul.innerHTML = "";
+  state.album.slice().reverse().forEach(e => {
+    const li = document.createElement("li"), canvas = document.createElement("canvas"), info = document.createElement("div");
+    const name = document.createElement("strong"), when = document.createElement("span"), btn = document.createElement("button");
+    canvas.width = 64; canvas.height = 48; canvas.setAttribute("aria-hidden", "true");
+    drawPortrait(canvas, e);
+    name.textContent = e.name;
+    when.textContent = `${e.since ? shortDate(e.since) + " to " : "Grown "}${shortDate(e.grownAt)}, ${e.sessions} sessions, ${fmtMinutes(e.minutes)}`;
+    btn.className = "link"; btn.textContent = "Certificate";
+    btn.setAttribute("aria-label", `${e.name}'s certificate`);
+    btn.addEventListener("click", () => openCertificate(e));
+    info.append(name, when, btn);
+    li.append(canvas, info);
+    ul.appendChild(li);
+  });
+}
 
 // Safari erases a website's data after 7 days without a visit unless it's on
 // the Home Screen, so iPhone users in the browser always see that risk.

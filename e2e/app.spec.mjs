@@ -190,6 +190,46 @@ test.describe("every pet is different", () => {
   });
 });
 
+test.describe("the album", () => {
+  const grown = (extra = {}) => petSave({ name: "Mochi", seed: 11, sessions: 20, minutes: 500, bestStreak: 6,
+    firstStudyAt: MORNING.getTime() - 20 * 864e5, grownAt: MORNING.getTime() - 864e5, ...extra });
+
+  test("a grown pet moves into the album and a new egg arrives", async ({ page }) => {
+    await open(page, { save: grown() });
+    await expect(page.locator("#album")).toBeHidden();
+    await page.locator("#sealNewPet").click();
+    await expect(page.locator("#newPetLead")).toContainText("Mochi moves into your album");
+    await page.locator("#newPetName").fill("Bean");
+    await page.locator("#newPetGo").click();
+
+    await expect(page.locator("#msg")).toContainText("Mochi is in your album now. Say hello to Bean, your 2nd pet!");
+    await expect(page.locator("#petName")).toHaveText("Bean");
+    await expect(page.locator("#small")).toHaveText("Study once to hatch");
+    await expect(page.locator("#sealCount")).toHaveText("0 of 20 sessions");
+    await expect(page.locator("#stSessions")).toHaveText("20");             // lifetime totals carry on
+    await expect(page.locator("#album li")).toHaveCount(1);
+    await expect(page.locator("#album li")).toContainText("Mochi");
+    await expect(page.locator("#album li")).toContainText("20 sessions, 8h 20m");
+
+    await page.reload();
+    await page.getByRole("button", { name: "Mochi's certificate" }).click();
+    await expect(page.locator("#certFor")).toContainText("for raising Mochi");
+    await expect(page.locator("#certLook")).toHaveText("A chubby pet with a belly patch, long bunny ears, a fluffy tail and a curl on top.");
+    await expect(page.locator("#certNewPet")).toBeHidden();                 // only the current pet can move on
+  });
+
+  test("the new pet only offers to move on once it's grown too", async ({ page }) => {
+    await open(page, { save: grown() });
+    await expect(page.locator("#sealNewPet")).toBeVisible();
+    await page.locator("#sealOpen").click();
+    await expect(page.locator("#certNewPet")).toBeVisible();
+    await page.locator("#certNewPet").click();
+    await page.locator("#newPetGo").click();
+    await expect(page.locator("#petName")).toHaveText("Pip");               // a default name if left blank
+    await expect(page.locator("#sealNewPet")).toBeHidden();
+  });
+});
+
 test.describe("the sealed certificate", () => {
   test("shows progress, unseals at full growth, and names the person", async ({ page }) => {
     await open(page, { save: petSave({ sessions: 19, minutes: 475, bestStreak: 5, firstStudyAt: MORNING.getTime() - 20 * 864e5 }) });

@@ -81,10 +81,16 @@
         <span><strong>Your certificate</strong><span>Unsealed! Tap to open it.</span></span>
         <span class="new" id="sealNew">New</span>
       </button>
+      <button class="secondary seal-next" id="sealNewPet" hidden>Raise a new pet</button>
       <div class="notes-links">
         <button class="link" id="invOpen">Invite a friend</button>
         <button class="link" id="invPasteOpen">Paste an invite link</button>
       </div>
+    </section>
+
+    <section class="album" id="album" aria-labelledby="albumTitle" hidden>
+      <h2 id="albumTitle">Album</h2>
+      <ul id="albumList"></ul>
     </section>
 
     <section class="settings">
@@ -164,6 +170,7 @@
   </div>
   <div class="row no-print">
     <button class="primary" id="certPrint">Print or save as PDF</button>
+    <button class="secondary" id="certNewPet" hidden>Raise a new pet</button>
     <button class="secondary" id="certInvite">Invite a friend</button>
     <button class="link" data-close>Close</button>
   </div>
@@ -226,6 +233,16 @@
   <div class="row">
     <button class="primary" id="invAccept">Add it to my pet</button>
     <button class="link" data-close>Not now</button>
+  </div>
+</dialog>
+
+<dialog id="newPetDlg" aria-labelledby="newPetTitle">
+  <h2 id="newPetTitle">Raise a new pet</h2>
+  <p id="newPetLead"></p>
+  <label class="field"><span>Your new pet's name</span><input id="newPetName" maxlength="16" autocomplete="off" placeholder="Pip"></label>
+  <div class="row">
+    <button class="primary" id="newPetGo">Bring the new egg</button>
+    <button class="link" data-close>Not yet</button>
   </div>
 </dialog>
 

@@ -375,6 +375,59 @@ test("each stage has words for what's new, and the certificate describes the who
   assert.equal(E.describeLook({ ...look, marks: "patch", tail: "none" }, true), "A chubby puppy with an eye patch, floppy ears and a star on top.");
 });
 
+function grownPet() {
+  const s = E.createState(at(2026, 10, 1), () => 0.25);
+  s.name = "Mochi"; s.userName = "Riley";
+  for (let i = 0; i < 20; i++) finishSession(s, at(2026, 10, 1 + Math.floor(i / 2), 9 + (i % 2)));
+  return s;
+}
+
+test("a grown pet moves into the album and a new egg starts fresh", () => {
+  const s = grownPet();
+  const firstSeed = s.seed;
+  E.startNewPet(s, "Bean", at(2026, 10, 11), NOTES, () => 0.75);
+  assert.equal(s.album.length, 1);
+  assert.equal(s.album[0].name, "Mochi");
+  assert.equal(s.album[0].seed, firstSeed);
+  assert.equal(s.album[0].sessions, 20);
+  assert.equal(s.album[0].notes, 6);
+  assert.equal(s.name, "Bean");
+  assert.notEqual(s.seed, firstSeed);                    // a new look
+  assert.equal(E.stageIndex(s), 0);                      // an egg again
+  assert.deepEqual(s.notes, {});                         // notes can be earned again
+  assert.equal(E.certificate(s, NOTES).earned, false);
+  assert.equal(s.userName, "Riley");                     // the person, streak and history stay
+  assert.equal(s.streak, 10);
+  assert.ok(Object.keys(s.days).length > 0);
+  assert.deepEqual(E.lifetime(s), { sessions: 20, minutes: 500 });
+});
+
+test("only a fully grown pet can move into the album", () => {
+  const s = E.createState(0);
+  assert.throws(() => E.startNewPet(s, "Bean", 0, NOTES), /fully grown/);
+});
+
+test("an inviter's P.S. and sealed message stay with the first pet's certificate", () => {
+  const s = grownPet();
+  E.applyInvite(s, fullInvite);
+  E.startNewPet(s, "Bean", at(2026, 10, 11), NOTES);
+  assert.equal(s.album[0].letter, fullInvite.letter);
+  assert.equal(s.album[0].letterFrom, "Jamie");
+  assert.equal(s.album[0].accessory, "bow");
+  assert.deepEqual(s.invite.ps, {});
+  assert.equal(s.invite.letter, "");
+  assert.equal(E.accessory(s), "bow");                   // the gift accessory stays
+});
+
+test("the album survives saving and backups, and bad entries are dropped", () => {
+  const s = grownPet();
+  E.startNewPet(s, "Bean", at(2026, 10, 11), NOTES);
+  const restored = E.importBackup(E.exportBackup(s, at(2026, 10, 12)), at(2026, 10, 12));
+  assert.deepEqual(restored.album, s.album);
+  const messy = E.migrate({ ...JSON.parse(JSON.stringify(s)), album: [s.album[0], { name: "x" }, null, "hi"] }, 0);
+  assert.equal(messy.album.length, 1);
+});
+
 test("days ago counts calendar days, not 24-hour periods", () => {
   assert.equal(E.daysAgo(at(2026, 10, 5, 9), at(2026, 10, 5, 22)), 0);
   assert.equal(E.daysAgo(at(2026, 10, 4, 23), at(2026, 10, 5, 9)), 1);
