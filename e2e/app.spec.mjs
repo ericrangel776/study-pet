@@ -151,6 +151,49 @@ test("naming the pet Lila or Daisy turns it into a puppy", async ({ page }) => {
   expect(await frame()).toBe(blob);
 });
 
+test.describe("daily goal and rest days", () => {
+  const session = async page => {
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+  };
+
+  test("two sessions reach the default goal, and the week chart notes it", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await expect(page.locator("#goalText")).toHaveText("Today: 0 of 2 sessions");
+    await session(page);
+    await expect(page.locator("#goalText")).toHaveText("Today: 1 of 2 sessions");
+    await expect(page.locator("#goalDots .on")).toHaveCount(1);
+    await page.clock.fastForward("05:01");                                   // the break ends
+    await session(page);
+    await expect(page.locator("#msg")).toContainText("Daily goal reached! Pip is so proud of you.");
+    await expect(page.locator("#goalText")).toHaveText("Today's goal done: 2 of 2 sessions");
+    await page.locator(".week-day.today").click();
+    await expect(page.locator("#weekTip")).toContainText("30m, goal met");
+  });
+
+  test("the goal can be changed or turned off", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await page.locator("#goalChips").getByRole("radio", { name: "4 a day" }).check();
+    await expect(page.locator("#goalText")).toHaveText("Today: 0 of 4 sessions");
+    await page.locator("#goalChips").getByRole("radio", { name: "Off" }).check();
+    await expect(page.locator("#goalLine")).toBeHidden();
+    await page.reload();
+    await expect(page.locator("#goalLine")).toBeHidden();
+  });
+
+  test("a saved rest day keeps a streak alive over a missed day", async ({ page }) => {
+    const twoDaysAgo = MORNING.getTime() - 2 * 864e5;
+    await open(page, { save: petSave({ streak: 7, bestStreak: 7, restDays: 1, lastDay: "2026-10-3", lastStudyAt: twoDaysAgo }) });
+    await expect(page.locator("#stStreak")).toHaveText("7");
+    await expect(page.locator("#stRest")).toHaveText("1 rest day saved");
+    await session(page);
+    await expect(page.locator("#msg")).toContainText("A rest day kept your 8-day streak going.");
+    await expect(page.locator("#stStreak")).toHaveText("8");
+    await expect(page.locator("#stRest")).toBeHidden();
+  });
+});
+
 test.describe("every pet is different", () => {
   const frameFor = async (browser, seed) => {
     const page = await browser.newPage();

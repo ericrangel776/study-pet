@@ -9,6 +9,9 @@ export const MAX_HEARTS = 4;
 export const SHORT_BREAK = 5;
 export const LONG_BREAK = 15;
 export const LONG_EVERY = 4;           // every 4th session earns a long break
+export const REST_EVERY = 7;           // every 7 days in a row earns a rest day...
+export const MAX_REST = 2;             // ...and up to 2 can be saved
+export const GOALS = [0, 1, 2, 3, 4];  // sessions a day; 0 turns the daily goal off
 export const STAGES = [
   { name: "egg", at: 0 }, { name: "baby", at: 1 }, { name: "kid", at: 4 },
   { name: "teen", at: 10 }, { name: "grown-up", at: 20 }
@@ -41,7 +44,7 @@ export function createState(now, random = Math.random) {
     name: "", sessions: 0, minutes: 0,
     seed: newSeed(random),          // decides how this pet looks as it grows (see Looks)
     hearts: 3, heartsAt: now,
-    streak: 0, lastDay: null, lastStudyAt: null,
+    streak: 0, lastDay: null, lastStudyAt: null, restDays: 0,
     bestStreak: 0, firstStudyAt: null, grownAt: null,   // for the certificate
     userName: "", certSeen: false,     // userName: the person, used across the app and on the certificate
     length: 25, active: null, onBreak: null,
@@ -49,7 +52,8 @@ export function createState(now, random = Math.random) {
     invite: null,          // extras from the person who invited them (see Invites below)
     album: [],             // grown pets that moved on (see Album below)
     days: {},              // minutes studied per calendar day, keyed by dayKey()
-    settings: { sound: true, notify: false, awake: false, lastBackupAt: null }
+    daySessions: {},       // sessions finished per calendar day, for the daily goal
+    settings: { sound: true, notify: false, awake: false, goal: 2, lastBackupAt: null }
   };
 }
 
@@ -75,6 +79,11 @@ export function migrate(raw, now) {
   s.days = {};
   if (raw.days && typeof raw.days === "object")
     for (const [k, v] of Object.entries(raw.days)) if (Number.isFinite(v) && v > 0) s.days[k] = v;
+  s.daySessions = {};
+  if (raw.daySessions && typeof raw.daySessions === "object")
+    for (const [k, v] of Object.entries(raw.daySessions)) if (Number.isInteger(v) && v > 0) s.daySessions[k] = v;
+  s.restDays = Number.isInteger(raw.restDays) ? Math.max(0, Math.min(MAX_REST, raw.restDays)) : 0;
+  if (!GOALS.includes(s.settings.goal)) s.settings.goal = 2;
   s.settings = Object.assign(createState(now).settings, raw.settings || {});
   if (!raw.version) s.onBreak = null;
   s.version = SAVE_VERSION;
@@ -91,10 +100,21 @@ export function stageIndex(s) {
   STAGES.forEach((st, k) => { if (s.sessions >= st.at) i = k; });
   return i;
 }
-// The streak counts if the last study day was today or yesterday.
+// Calendar days since the last study day (0 = today).
+function daysSinceStudy(s, now) {
+  if (s.lastStudyAt) return daysAgo(s.lastStudyAt, now);
+  return s.lastDay === dayKey(now) ? 0 : s.lastDay === prevDayKey(now) ? 1 : Infinity;   // saves from before lastStudyAt
+}
+// The streak counts if the last study day was today or yesterday, or if saved
+// rest days can cover the days missed since.
 export function streakNow(s, now) {
   if (!s.lastDay) return 0;
-  return (s.lastDay === dayKey(now) || s.lastDay === prevDayKey(now)) ? s.streak : 0;
+  return daysSinceStudy(s, now) <= 1 + s.restDays ? s.streak : 0;
+}
+// Today's progress toward the daily goal.
+export function goalToday(s, now) {
+  const goal = s.settings.goal, done = s.daySessions[dayKey(now)] || 0;
+  return { goal, done, met: goal > 0 && done >= goal };
 }
 export function mood(s, now) {
   if (s.active) return "focus";
@@ -196,9 +216,15 @@ export function completeFocus(s, notesList) {
   s.heartsAt = t;
   const today = dayKey(t);
   s.days[today] = (s.days[today] || 0) + a.minutes;
+  s.daySessions[today] = (s.daySessions[today] || 0) + 1;
+  let restUsed = 0, restEarned = false;
   if (s.lastDay !== today) {
-    s.streak = s.lastDay === prevDayKey(t) ? s.streak + 1 : 1;
+    const missed = s.lastDay ? daysSinceStudy(s, t) - 1 : Infinity;
+    if (missed === 0) s.streak += 1;
+    else if (missed <= s.restDays) { restUsed = missed; s.restDays -= missed; s.streak += 1; }   // rest days cover the gap
+    else s.streak = 1;
     s.lastDay = today;
+    if (s.streak % REST_EVERY === 0 && s.restDays < MAX_REST) { s.restDays += 1; restEarned = true; }
   } else if (!s.streak) s.streak = 1;
   s.lastStudyAt = t;
   s.bestStreak = Math.max(s.bestStreak, s.streak);
@@ -207,7 +233,8 @@ export function completeFocus(s, notesList) {
   s.onBreak = { minutes: breakMinutes, endAt: t + breakMinutes * (a.unitMs || 60000) };
   const after = stageIndex(s);
   if (after === STAGES.length - 1 && !s.grownAt) s.grownAt = t;
-  return { grewTo: after > before ? after : null, notes: unlockNotes(s, t, notesList), breakMinutes };
+  const goal = s.settings.goal, goalMet = goal > 0 && s.daySessions[today] === goal;
+  return { grewTo: after > before ? after : null, notes: unlockNotes(s, t, notesList), breakMinutes, goalMet, restUsed, restEarned };
 }
 
 // Called many times a second. Returns an event when a timer runs out, else null.
@@ -232,7 +259,7 @@ export function lastWeek(s, now) {
   d.setDate(d.getDate() - 6);
   for (let k = 0; k < 7; k++) {
     const key = dayKey(d.getTime());
-    out.push({ key, time: d.getTime(), minutes: s.days[key] || 0 });
+    out.push({ key, time: d.getTime(), minutes: s.days[key] || 0, sessions: s.daySessions[key] || 0 });
     d.setDate(d.getDate() + 1);
   }
   return out;

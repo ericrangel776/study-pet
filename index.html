@@ -46,10 +46,11 @@
     </fieldset>
 
     <dl class="stats">
-      <div><dt>Day streak</dt><dd id="stStreak">0</dd></div>
+      <div><dt>Day streak</dt><dd id="stStreak">0</dd><span class="tile-note" id="stRest" hidden></span></div>
       <div><dt>Sessions</dt><dd id="stSessions">0</dd></div>
       <div><dt>Focus time</dt><dd id="stTime">0m</dd></div>
     </dl>
+    <p class="goal" id="goalLine" hidden><span class="goal-dots" id="goalDots" aria-hidden="true"></span><span id="goalText"></span></p>
     <section class="week" aria-labelledby="weekTitle">
       <div class="week-head"><h2 id="weekTitle">This week</h2><span class="week-total" id="weekTotal"></span></div>
       <div class="week-plot">
@@ -98,6 +99,10 @@
       <h2>Settings</h2>
       <label class="switch"><input type="checkbox" id="soundToggle"><span>Sound when a timer ends</span></label>
       <label class="switch" id="notifyRow"><input type="checkbox" id="notifyToggle"><span>Desktop alert when a timer ends</span></label>
+      <fieldset class="lengths goal-pick">
+        <legend>Daily goal</legend>
+        <div class="chips" id="goalChips"></div>
+      </fieldset>
       <label class="switch" id="awakeRow"><input type="checkbox" id="awakeToggle"><span>Keep the screen on during a timer</span></label>
       <div class="backup-row">
         <button class="secondary" id="backupBtn">Back up progress</button>
