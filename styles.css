@@ -220,3 +220,17 @@ dialog details.ps-block textarea{min-height:64px}
 .welcome-extras{margin:0 0 20px;padding-left:20px;color:var(--ink)}
 .welcome-extras:empty{display:none}
 .welcome-extras li{margin-bottom:4px}
+
+/* Album: pets that grew up and moved on */
+.seal-next{margin:-8px 0 20px}
+.seal-next[hidden]{display:none}
+.album h2{font-size:20px;font-weight:600;margin:0 0 10px}
+.album[hidden]{display:none}
+.album ul{list-style:none;margin:0 0 24px;padding:0;display:grid;gap:8px}
+.album li{display:flex;gap:12px;align-items:center;background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:10px 12px}
+.album canvas{flex:none;width:64px;image-rendering:pixelated;image-rendering:crisp-edges;background:#B9C79A;border-radius:8px}
+.album li div{display:flex;flex-direction:column;gap:2px;min-width:0}
+.album li strong{font-weight:600}
+.album li span{font-size:14px;color:var(--muted)}
+.album li .link{align-self:flex-start;font-size:14px}
+#certDlg .row [hidden]{display:none}

@@ -69,4 +69,5 @@ After the first visit, the app opens without an internet connection.
   revealed one stage at a time, so no two pets grow up alike (see `TRAITS` in `src/engine.js`).
   A pet named Lila or Daisy is a puppy (`DOG_NAMES` in `src/config.js`).
 - The certificate unseals when the pet is fully grown (20 sessions) and can be printed or saved as a PDF.
+  After that, **Raise a new pet** moves the grown pet into the Album (with its certificate) and brings a new egg.
 - Run `npm test` and `npm run test:browser` before every commit.

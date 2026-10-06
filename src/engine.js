@@ -47,6 +47,7 @@ export function createState(now, random = Math.random) {
     length: 25, active: null, onBreak: null,
     notes: {},
     invite: null,          // extras from the person who invited them (see Invites below)
+    album: [],             // grown pets that moved on (see Album below)
     days: {},              // minutes studied per calendar day, keyed by dayKey()
     settings: { sound: true, notify: false, awake: false, lastBackupAt: null }
   };
@@ -61,6 +62,7 @@ export function migrate(raw, now) {
   s.notes = raw.notes && typeof raw.notes === "object" ? raw.notes : {};
   if (!Number.isInteger(s.seed) || s.seed < 0) s.seed = newSeed();   // older pets get their own look once
   s.invite = cleanInvite(raw.invite);
+  s.album = Array.isArray(raw.album) ? raw.album.map(cleanAlbumEntry).filter(Boolean).slice(-200) : [];
   // Saves from before the certificate: the best streak is at least the current one,
   // and an already grown pet counts as grown at its last session.
   s.bestStreak = Math.max(Number.isFinite(raw.bestStreak) ? raw.bestStreak : 0, Number.isFinite(raw.streak) ? raw.streak : 0);
@@ -260,14 +262,49 @@ export function unreadNotes(s, notesList) {
 /* ---------- Certificate ---------- */
 // The long-term goal: sealed until the pet is fully grown, then a certificate
 // of everything the person did to get there.
+// It carries everything needed to show it again later, so an album entry is
+// just a saved copy of the certificate.
 export function certificate(s, notesList) {
   const goal = STAGES[STAGES.length - 1].at;
   return {
     earned: !!s.grownAt, goal, progress: Math.min(s.sessions, goal),
+    name: s.name, seed: s.seed, accessory: accessory(s),
     sessions: s.sessions, minutes: s.minutes, bestStreak: s.bestStreak,
     notes: notesList.filter(n => s.notes[n.id]).length, totalNotes: notesList.length,
-    since: s.firstStudyAt, grownAt: s.grownAt
+    since: s.firstStudyAt, grownAt: s.grownAt,
+    letter: (s.invite && s.invite.letter) || "", letterFrom: (s.invite && s.invite.from) || ""
   };
+}
+
+/* ---------- Album ---------- */
+// After the certificate, the grown pet can move into the album and a new egg
+// arrives with its own look. The person, their streak, history and settings
+// stay; the pet's own progress starts over.
+const isNum = v => Number.isFinite(v) && v >= 0;
+function cleanAlbumEntry(e) {
+  if (!e || typeof e !== "object" || typeof e.name !== "string" || !Number.isInteger(e.seed)
+      || ![e.sessions, e.minutes, e.bestStreak, e.notes, e.totalNotes, e.grownAt].every(isNum)) return null;
+  const text = v => (typeof v === "string" ? v : "");
+  return { earned: true, name: e.name.slice(0, 16), seed: e.seed >>> 0, accessory: ACCESSORIES.includes(e.accessory) ? e.accessory : null,
+    sessions: e.sessions, minutes: e.minutes, bestStreak: e.bestStreak, notes: e.notes, totalNotes: e.totalNotes,
+    since: isNum(e.since) ? e.since : null, grownAt: e.grownAt, letter: text(e.letter).slice(0, 400), letterFrom: text(e.letterFrom).slice(0, 24) };
+}
+export function startNewPet(s, petName, now, notesList, random = Math.random) {
+  if (!s.grownAt) throw new Error("Only a fully grown pet can move into the album.");
+  const c = certificate(s, notesList);
+  delete c.goal; delete c.progress;
+  s.album.push(c);
+  Object.assign(s, {
+    name: petName, seed: newSeed(random), sessions: 0, minutes: 0, hearts: 3, heartsAt: now,
+    notes: {}, bestStreak: s.streak, firstStudyAt: null, grownAt: null, certSeen: false, active: null, onBreak: null
+  });
+  // The inviter's P.S. lines and sealed message were for the first pet; they stay on its certificate.
+  if (s.invite) s.invite = { ...s.invite, ps: {}, letter: "" };
+}
+// Totals across every pet the person has raised.
+export function lifetime(s) {
+  return s.album.reduce((t, e) => ({ sessions: t.sessions + e.sessions, minutes: t.minutes + e.minutes }),
+                        { sessions: s.sessions, minutes: s.minutes });
 }
 
 /* ---------- Invites ---------- */
