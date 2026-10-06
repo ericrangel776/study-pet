@@ -4,7 +4,8 @@ import jsQR from "jsqr";
 import * as E from "../src/engine.js";
 import { NOTES } from "../src/config.js";
 import { encodeMove, decodeMove } from "../src/move.js";
-import { qrEncode, QR_MAX_BYTES } from "../src/qr.js";
+import QRCode from "qrcode";
+import { qrEncode, qrMaxBytes, QR_MAX_BYTES } from "../src/qr.js";
 
 // Draw a QR matrix as pixels (4 per module, with the required quiet border) and read it back.
 function scan(matrix) {
@@ -52,6 +53,26 @@ test("QR codes of every size scan correctly", () => {
     assert.equal(scan(qrEncode(new TextEncoder().encode(text))), text, `${len} bytes`);
   }
   assert.throws(() => qrEncode(new Uint8Array(QR_MAX_BYTES + 1)), /Too much data/);
+});
+
+test("QR codes match a widely used library, module for module, at every version", () => {
+  for (let ver = 1; ver <= 40; ver++) {
+    if (ver === 23) continue;                              // skipped on purpose; see below
+    const text = "studypet".repeat(400).slice(0, qrMaxBytes(ver)), mask = ver % 8;
+    const mine = qrEncode(new TextEncoder().encode(text), mask);
+    const ref = QRCode.create(text, { errorCorrectionLevel: "L", version: ver, maskPattern: mask }).modules;
+    assert.equal(mine.length, ref.size, `version ${ver} size`);
+    let diff = 0;
+    for (let y = 0; y < ref.size; y++) for (let x = 0; x < ref.size; x++) if (mine[y][x] !== !!ref.get(y, x)) diff++;
+    assert.equal(diff, 0, `version ${ver}: ${diff} modules differ`);
+  }
+});
+
+test("data that would need version 23 gets version 24, which every scanner reads", () => {
+  const text = "studypet".repeat(400).slice(0, qrMaxBytes(23));
+  const m = qrEncode(new TextEncoder().encode(text));
+  assert.equal((m.length - 17) / 4, 24);
+  assert.equal(scan(m), text);
 });
 
 test("a damaged move link is rejected", async () => {
