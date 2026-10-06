@@ -151,6 +151,69 @@ test("naming the pet Lila or Daisy turns it into a puppy", async ({ page }) => {
   expect(await frame()).toBe(blob);
 });
 
+test.describe("session comforts", () => {
+  test("the middle key pauses once, and resumes", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await expect(page.locator("#lengthLbl")).toHaveText("Pause");
+    await page.clock.fastForward("05:00");
+    await page.locator("#keyLength").click();
+    await expect(page.locator("#lengthLbl")).toHaveText("Resume");
+    await expect(page.locator("#small")).toContainText("Paused, resumes in");
+    await page.clock.fastForward("02:00");
+    await expect(page.locator("#big")).toHaveText("10:00");             // frozen while paused
+    await page.locator("#keyLength").click();
+    await expect(page.locator("#keyLength")).toBeDisabled();             // the one pause is used
+    await page.clock.fastForward("10:01");
+    await expect(page.locator("#msg")).toContainText("Enjoy a 5-minute break");   // the session finished
+  });
+
+  test("keyboard shortcuts start, pause and change the length", async ({ page, isMobile }) => {
+    test.skip(isMobile, "shortcuts are for keyboards");
+    await open(page, { save: petSave() });
+    await page.locator("body").click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press("l");
+    await expect(page.getByRole("radio", { name: "45 min" })).toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(page.locator("#focusLbl")).toHaveText("Stop");
+    await page.keyboard.press("p");
+    await expect(page.locator("#lengthLbl")).toHaveText("Resume");
+    await page.keyboard.press("p");
+    await page.keyboard.press("Space");
+    await page.keyboard.press("Space");
+    await expect(page.locator("#msg")).toContainText("Stopped early");
+  });
+
+  test("the theme can follow the device or stay light or dark", async ({ page }) => {
+    await open(page, { save: petSave() });
+    const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.locator("#themeChips").getByRole("radio", { name: "Dark" }).check();
+    expect(await bg()).toBe("rgb(28, 25, 40)");
+    await page.reload();
+    expect(await bg()).toBe("rgb(28, 25, 40)");                          // remembered
+    await page.locator("#themeChips").getByRole("radio", { name: "Match device" }).check();
+    expect(await bg()).toBe("rgb(238, 234, 248)");
+  });
+
+  test("phones buzz when a timer ends", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.buzzes = [];
+      navigator.vibrate = p => { window.buzzes.push(p); return true; };
+      const mm = window.matchMedia.bind(window);
+      window.matchMedia = q => (q === "(pointer: coarse)" ? { matches: true, addEventListener() {} } : mm(q));
+    });
+    await open(page, { save: petSave() });
+    await expect(page.locator("#vibrateToggle")).toBeChecked();
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+    await expect(page.locator("#msg")).toContainText("Enjoy a 5-minute break");
+    expect(await page.evaluate(() => window.buzzes)).toContainEqual([200, 100, 200]);
+  });
+});
+
 test.describe("daily goal and rest days", () => {
   const session = async page => {
     await page.getByRole("radio", { name: "15 min" }).check();

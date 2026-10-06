@@ -79,4 +79,6 @@ After the first visit, the app opens without an internet connection.
 - **Move to another device** (Settings) shows a QR code; scanning it opens the app there and moves the pet
   after confirming. "Copy link" and "Paste a link" cover devices that can't scan, like moving between
   Safari and the Home Screen app on iPhone.
+- During a session the middle key pauses it once, for up to 5 minutes. On a keyboard: Space starts or stops,
+  P pauses, L changes the length. Settings has a theme switch and, on phones, vibration.
 - Run `npm test` and `npm run test:browser` before every commit.

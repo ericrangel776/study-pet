@@ -74,3 +74,11 @@ export function keepAwake(want) {
   }
 }
 export const isAwake = () => wakeLock !== null;
+
+// A buzz on phones, for when the sound is off. Desktop browsers have the call
+// but no motor, so it's only offered on touch screens.
+export const vibrateSupported = () => typeof navigator !== "undefined" && typeof navigator.vibrate === "function"
+  && typeof matchMedia === "function" && matchMedia("(pointer: coarse)").matches;
+export function buzz(pattern) {
+  try { navigator.vibrate(pattern); } catch (e) { /* not allowed here; the other alerts still run */ }
+}
