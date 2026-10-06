@@ -214,6 +214,27 @@ test.describe("session comforts", () => {
   });
 });
 
+test("during a break, Catch plays the ball game", async ({ page }) => {
+  await open(page, { save: petSave() });
+  await page.getByRole("radio", { name: "15 min" }).check();
+  await page.locator("#keyFocus").click();
+  await page.clock.fastForward("15:01");
+  await expect(page.locator("#patLbl")).toHaveText("Catch");
+  await expect(page.locator("#small")).toHaveText("Break! Catch the ball");
+  // Freeze time at the next two landings and catch.
+  const now = await page.evaluate(() => Date.now());
+  const k = Math.ceil((now / 350 - Math.PI / 2) / Math.PI) + 2;
+  for (const i of [0, 1]) {
+    await page.clock.pauseAt(new Date(Math.round(350 * (Math.PI / 2 + (k + i) * Math.PI))));
+    await page.locator("#keyPat").click();
+  }
+  await expect(page.locator("#small")).toHaveText("2 in a row!");
+  await expect(page.locator("#msg")).toHaveText("2 catches in a row, a new best!");
+  await page.locator("#keyPat").click();                                   // again on the same bounce: a miss
+  await expect(page.locator("#msg")).toContainText("Missed! Catch it just as it lands. Your best is 2 in a row.");
+  expect((await saved(page)).bestCatches).toBe(2);
+});
+
 test.describe("daily goal and rest days", () => {
   const session = async page => {
     await page.getByRole("radio", { name: "15 min" }).check();

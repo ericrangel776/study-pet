@@ -49,6 +49,7 @@ export function createState(now, random = Math.random) {
     hearts: 3, heartsAt: now,
     streak: 0, lastDay: null, lastStudyAt: null, restDays: 0,
     bestStreak: 0, firstStudyAt: null, grownAt: null,   // for the certificate
+    bestCatches: 0,                 // the break game's best run
     userName: "", certSeen: false,     // userName: the person, used across the app and on the certificate
     length: 25, active: null, onBreak: null,
     notes: {},
@@ -86,6 +87,7 @@ export function migrate(raw, now) {
   s.daySessions = {};
   if (raw.daySessions && typeof raw.daySessions === "object")
     for (const [k, v] of Object.entries(raw.daySessions)) if (Number.isInteger(v) && v > 0) s.daySessions[k] = v;
+  s.bestCatches = Number.isInteger(raw.bestCatches) && raw.bestCatches > 0 ? raw.bestCatches : 0;
   s.restDays = Number.isInteger(raw.restDays) ? Math.max(0, Math.min(MAX_REST, raw.restDays)) : 0;
   if (!GOALS.includes(s.settings.goal)) s.settings.goal = 2;
   if (!THEMES.includes(s.settings.theme)) s.settings.theme = "auto";
@@ -299,6 +301,29 @@ export function tickState(s, now, notesList) {
     return { type: "breakDone" };
   }
   return null;
+}
+
+/* ---------- Break game ---------- */
+// During a break the pet bounces a ball. Catching it as it lands builds a run of
+// catches; a mistimed catch ends the run. One catch per bounce.
+const BALL_MS = 350;                                   // the ball's height is |cos(now / 350)|
+export const ballHeight = now => Math.round(Math.abs(Math.cos(now / BALL_MS)) * 12);   // pixels above the ground
+export const CATCH_HEIGHT = 3;                         // close enough to the ground to catch
+const bounceOf = now => Math.floor(now / BALL_MS / Math.PI);   // which bounce: each runs peak to peak, landing in the middle
+// still: the ball isn't moving (reduced motion), so every try counts.
+export function tryCatch(s, now, still) {
+  const b = s.onBreak;
+  if (!b) return null;
+  const bounce = bounceOf(now);
+  if (!still && (ballHeight(now) > CATCH_HEIGHT || b.lastBounce === bounce)) {
+    b.catches = 0;
+    return { caught: false, catches: 0, best: s.bestCatches };
+  }
+  b.lastBounce = bounce;
+  b.catches = (b.catches || 0) + 1;
+  const best = b.catches > s.bestCatches;
+  if (best) s.bestCatches = b.catches;
+  return { caught: true, catches: b.catches, best: s.bestCatches, newBest: best };
 }
 
 /* ---------- History ---------- */

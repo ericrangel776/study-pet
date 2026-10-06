@@ -542,6 +542,33 @@ test("a long pause ends on its own after 5 minutes", () => {
   assert.equal(s.active.endAt, at(2026, 10, 5, 9, 30));
 });
 
+// The ball lands (height 0) at 350 * (pi/2 + k*pi) ms.
+const landing = k => Math.round(350 * (Math.PI / 2 + k * Math.PI));
+
+test("catching the ball as it lands builds a run; a mistimed catch ends it", () => {
+  const base = 1_000_000;                                  // a bounce number well past zero
+  const s = E.createState(0);
+  s.onBreak = { minutes: 5, endAt: Infinity };
+  assert.equal(E.ballHeight(landing(base)), 0);
+  assert.equal(E.tryCatch(s, landing(base), false).caught, true);
+  assert.equal(E.tryCatch(s, landing(base) + 20, false).caught, false);   // twice on one bounce is a miss
+  assert.equal(E.tryCatch(s, landing(base + 1), false).catches, 1);       // the run starts again
+  assert.equal(E.tryCatch(s, landing(base + 2), false).catches, 2);
+  const peak = landing(base + 3) - Math.round(350 * Math.PI / 2);
+  assert.ok(E.ballHeight(peak) > E.CATCH_HEIGHT);
+  assert.equal(E.tryCatch(s, peak, false).caught, false);                 // too high
+  assert.equal(s.onBreak.catches, 0);
+  assert.equal(s.bestCatches, 2);
+});
+
+test("with reduced motion every catch counts, and there's no game outside a break", () => {
+  const s = E.createState(0);
+  assert.equal(E.tryCatch(s, 123, true), null);
+  s.onBreak = { minutes: 5, endAt: Infinity };
+  assert.equal(E.tryCatch(s, 123, true).catches, 1);
+  assert.equal(E.tryCatch(s, 456, true).catches, 2);
+});
+
 test("days ago counts calendar days, not 24-hour periods", () => {
   assert.equal(E.daysAgo(at(2026, 10, 5, 9), at(2026, 10, 5, 22)), 0);
   assert.equal(E.daysAgo(at(2026, 10, 4, 23), at(2026, 10, 5, 9)), 1);
