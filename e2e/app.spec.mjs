@@ -38,7 +38,7 @@ test("a first visit asks for the pet's name", async ({ page }) => {
 
 test("the page carries its dedication", async ({ page }) => {
   await open(page, { save: petSave() });
-  await expect(page.locator("footer")).toHaveText("Made with love for Haylee");
+  await expect(page.locator("footer")).toHaveText("Dedicated to Haylee :)");
 });
 
 test("a first visit needs the person's name, and greets them by it", async ({ page }) => {
