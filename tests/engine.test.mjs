@@ -428,6 +428,147 @@ test("the album survives saving and backups, and bad entries are dropped", () =>
   assert.equal(messy.album.length, 1);
 });
 
+test("the daily goal counts today's sessions and says when it's reached", () => {
+  const s = E.createState(at(2026, 10, 5, 8));
+  assert.deepEqual(E.goalToday(s, at(2026, 10, 5, 9)), { goal: 2, done: 0, met: false });
+  let ev = finishSession(s, at(2026, 10, 5, 10));
+  assert.equal(ev.goalMet, false);
+  ev = finishSession(s, at(2026, 10, 5, 11));
+  assert.equal(ev.goalMet, true);                          // reached with this session
+  ev = finishSession(s, at(2026, 10, 5, 12));
+  assert.equal(ev.goalMet, false);                         // only celebrated once
+  assert.deepEqual(E.goalToday(s, at(2026, 10, 5, 13)), { goal: 2, done: 3, met: true });
+  assert.equal(E.goalToday(s, at(2026, 10, 6, 9)).done, 0);  // a new day starts at zero
+  s.settings.goal = 0;
+  assert.equal(E.goalToday(s, at(2026, 10, 5, 13)).met, false);
+});
+
+test("every 7 days in a row earns a rest day, up to 2", () => {
+  const s = E.createState(at(2026, 10, 1));
+  let earned = [];
+  for (let d = 1; d <= 21; d++) earned.push(finishSession(s, at(2026, 10, d, 10)).restEarned);
+  assert.deepEqual(earned.map((e, i) => (e ? i + 1 : 0)).filter(Boolean), [7, 14]);   // the 21st day would be a 3rd
+  assert.equal(s.restDays, 2);
+});
+
+test("a rest day covers a missed day and keeps the streak going", () => {
+  const s = E.createState(at(2026, 10, 1));
+  for (let d = 1; d <= 7; d++) finishSession(s, at(2026, 10, d, 10));
+  assert.equal(s.restDays, 1);
+  assert.equal(E.streakNow(s, at(2026, 10, 9, 10)), 7);   // missed Oct 8, but a rest day is saved
+  const ev = finishSession(s, at(2026, 10, 9, 10));
+  assert.equal(ev.restUsed, 1);
+  assert.equal(s.streak, 8);
+  assert.equal(s.restDays, 0);
+  finishSession(s, at(2026, 10, 12, 10));                 // missed two more with none saved
+  assert.equal(s.streak, 1);
+});
+
+test("without rest days a missed day still ends the streak", () => {
+  const s = E.createState(at(2026, 10, 1));
+  finishSession(s, at(2026, 10, 1, 10));
+  finishSession(s, at(2026, 10, 2, 10));
+  assert.equal(E.streakNow(s, at(2026, 10, 4, 10)), 0);
+  assert.equal(finishSession(s, at(2026, 10, 4, 10)).restUsed, 0);
+  assert.equal(s.streak, 1);
+});
+
+test("long sessions grow bunny ears, and quick ones antennae, whatever the seed", () => {
+  for (const [minutes, ears] of [[60, "bunny"], [15, "antennae"]]) {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const s = E.createState(at(2026, 10, 1)); s.seed = seed;
+      for (let i = 0; i < 4; i++) finishSession(s, at(2026, 10, 1, 8 + i * 2), minutes);
+      assert.equal(E.petLook(s).ears, ears, `${minutes}-minute sessions, seed ${seed}`);
+    }
+  }
+});
+
+test("habits are locked in when the stage arrives, and explained", () => {
+  const s = E.createState(at(2026, 10, 1)); s.seed = 3;
+  let ev;
+  for (let i = 0; i < 4; i++) ev = finishSession(s, at(2026, 10, 1, 8 + i * 2), 60);
+  assert.equal(ev.grewTo, 2);
+  assert.equal(ev.growReason, "from all those long sessions");
+  for (let i = 0; i < 6; i++) finishSession(s, at(2026, 10, 2, 8 + i), 15);   // later habits change...
+  assert.equal(E.petLook(s).ears, "bunny");                                   // ...nothing already grown
+});
+
+test("a long streak earns a fluffy tail and a star", () => {
+  const s = E.createState(at(2026, 10, 1)); s.seed = 3;
+  let tail, top;
+  for (let i = 0; i < 20; i++) {
+    const ev = finishSession(s, at(2026, 10, 1 + Math.floor(i / 2), 9 + (i % 2)), 25);
+    if (ev.grewTo === 3) tail = ev.growReason;
+    if (ev.grewTo === 4) top = ev.growReason;
+  }
+  assert.equal(E.petLook(s).tail, "fluffy");
+  assert.equal(tail, "from studying 5 days in a row");
+  assert.equal(E.petLook(s).topper, "star");
+  assert.equal(top, "for that 10-day streak");
+});
+
+test("the album keeps a pet's earned traits, and a new pet starts without them", () => {
+  const s = E.createState(at(2026, 10, 1)); s.seed = 3; s.name = "Mochi";
+  for (let i = 0; i < 20; i++) finishSession(s, at(2026, 10, 1 + Math.floor(i / 2), 9 + (i % 2)), 45);
+  const look = E.petLook(s);
+  E.startNewPet(s, "Bean", at(2026, 10, 12), NOTES);
+  assert.deepEqual(E.petLook(s.album[0]), look);
+  assert.deepEqual(s.traits, {});
+});
+
+test("a pause freezes the timer, once per session", () => {
+  const s = E.createState(at(2026, 10, 5, 8));
+  s.length = 25;
+  E.startFocus(s, at(2026, 10, 5, 9), MIN);
+  assert.equal(E.pauseFocus(s, at(2026, 10, 5, 9, 10)), true);
+  assert.equal(E.mood(s, at(2026, 10, 5, 9, 11)), "paused");
+  assert.equal(E.focusLeft(s, at(2026, 10, 5, 9, 13)), 15 * MIN);       // frozen at 15 minutes left
+  assert.equal(E.tickState(s, at(2026, 10, 5, 9, 13), NOTES), null);
+  E.resumeFocus(s, at(2026, 10, 5, 9, 13));                           // paused for 3 minutes
+  assert.equal(s.active.endAt, at(2026, 10, 5, 9, 28));
+  assert.equal(E.pauseFocus(s, at(2026, 10, 5, 9, 15)), false);       // only one pause
+  assert.equal(E.tickState(s, at(2026, 10, 5, 9, 28), NOTES).type, "focusDone");
+  assert.equal(s.minutes, 25);
+});
+
+test("a long pause ends on its own after 5 minutes", () => {
+  const s = E.createState(at(2026, 10, 5, 8));
+  s.length = 25;
+  E.startFocus(s, at(2026, 10, 5, 9), MIN);
+  E.pauseFocus(s, at(2026, 10, 5, 9, 10));
+  assert.equal(E.tickState(s, at(2026, 10, 5, 9, 14), NOTES), null);
+  assert.equal(E.tickState(s, at(2026, 10, 5, 9, 20), NOTES).type, "pauseOver");   // checked late, still only 5 minutes
+  assert.equal(s.active.pausedAt, null);
+  assert.equal(s.active.endAt, at(2026, 10, 5, 9, 30));
+});
+
+// The ball lands (height 0) at 350 * (pi/2 + k*pi) ms.
+const landing = k => Math.round(350 * (Math.PI / 2 + k * Math.PI));
+
+test("catching the ball as it lands builds a run; a mistimed catch ends it", () => {
+  const base = 1_000_000;                                  // a bounce number well past zero
+  const s = E.createState(0);
+  s.onBreak = { minutes: 5, endAt: Infinity };
+  assert.equal(E.ballHeight(landing(base)), 0);
+  assert.equal(E.tryCatch(s, landing(base), false).caught, true);
+  assert.equal(E.tryCatch(s, landing(base) + 20, false).caught, false);   // twice on one bounce is a miss
+  assert.equal(E.tryCatch(s, landing(base + 1), false).catches, 1);       // the run starts again
+  assert.equal(E.tryCatch(s, landing(base + 2), false).catches, 2);
+  const peak = landing(base + 3) - Math.round(350 * Math.PI / 2);
+  assert.ok(E.ballHeight(peak) > E.CATCH_HEIGHT);
+  assert.equal(E.tryCatch(s, peak, false).caught, false);                 // too high
+  assert.equal(s.onBreak.catches, 0);
+  assert.equal(s.bestCatches, 2);
+});
+
+test("with reduced motion every catch counts, and there's no game outside a break", () => {
+  const s = E.createState(0);
+  assert.equal(E.tryCatch(s, 123, true), null);
+  s.onBreak = { minutes: 5, endAt: Infinity };
+  assert.equal(E.tryCatch(s, 123, true).catches, 1);
+  assert.equal(E.tryCatch(s, 456, true).catches, 2);
+});
+
 test("days ago counts calendar days, not 24-hour periods", () => {
   assert.equal(E.daysAgo(at(2026, 10, 5, 9), at(2026, 10, 5, 22)), 0);
   assert.equal(E.daysAgo(at(2026, 10, 4, 23), at(2026, 10, 5, 9)), 1);
