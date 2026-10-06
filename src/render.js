@@ -202,7 +202,7 @@ function drawHatch(t, now, rm, dog, accessory, look) {
 }
 
 /* ---------- One frame ---------- */
-// v = { now, mood, stage, hearts, unread, hatchAt, growAt, patAt, rm, dog, accessory, look, portrait }
+// v = { now, mood, stage, hearts, unread, hatchAt, growAt, patAt, catchAt, rm, dog, accessory, look, portrait }
 export function draw(ctx, v) {
   cx = ctx;
   const { now, mood: m, stage: st, rm } = v;
@@ -248,8 +248,9 @@ export function draw(ctx, v) {
   const P = drawPet(st, { x, ground, squash, face, blush, dog: v.dog, accessory: v.accessory, look: v.look });
 
   if (m === "break" && !patting) {
-    const bounce = rm ? 6 : Math.round(Math.abs(Math.cos(now / 350)) * 12);
+    const bounce = rm ? 6 : Math.round(Math.abs(Math.cos(now / 350)) * 12);   // matches ballHeight() in engine.js
     sprite(BALL, 49, GROUND - 5 - bounce, INK);
+    if (now - (v.catchAt || -1e12) < 350) sprite(SPARK, 55, GROUND - 9 - bounce, INK);   // a catch
   }
   if (m === "focus" && !patting) {
     const bx = x - 5.5, by = Math.round(P.cy + P.ry * .45);

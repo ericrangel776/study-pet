@@ -9,6 +9,11 @@ export const MAX_HEARTS = 4;
 export const SHORT_BREAK = 5;
 export const LONG_BREAK = 15;
 export const LONG_EVERY = 4;           // every 4th session earns a long break
+export const REST_EVERY = 7;           // every 7 days in a row earns a rest day...
+export const MAX_REST = 2;             // ...and up to 2 can be saved
+export const GOALS = [0, 1, 2, 3, 4];  // sessions a day; 0 turns the daily goal off
+export const PAUSE_MAX = 5;            // one pause per session, up to 5 minutes (seconds in test mode)
+export const THEMES = ["auto", "light", "dark"];
 export const STAGES = [
   { name: "egg", at: 0 }, { name: "baby", at: 1 }, { name: "kid", at: 4 },
   { name: "teen", at: 10 }, { name: "grown-up", at: 20 }
@@ -40,16 +45,19 @@ export function createState(now, random = Math.random) {
     version: SAVE_VERSION,
     name: "", sessions: 0, minutes: 0,
     seed: newSeed(random),          // decides how this pet looks as it grows (see Looks)
+    traits: {},                     // traits earned by study habits, locked in as the pet grows
     hearts: 3, heartsAt: now,
-    streak: 0, lastDay: null, lastStudyAt: null,
+    streak: 0, lastDay: null, lastStudyAt: null, restDays: 0,
     bestStreak: 0, firstStudyAt: null, grownAt: null,   // for the certificate
+    bestCatches: 0,                 // the break game's best run
     userName: "", certSeen: false,     // userName: the person, used across the app and on the certificate
     length: 25, active: null, onBreak: null,
     notes: {},
     invite: null,          // extras from the person who invited them (see Invites below)
     album: [],             // grown pets that moved on (see Album below)
     days: {},              // minutes studied per calendar day, keyed by dayKey()
-    settings: { sound: true, notify: false, awake: false, lastBackupAt: null }
+    daySessions: {},       // sessions finished per calendar day, for the daily goal
+    settings: { sound: true, notify: false, awake: false, vibrate: true, goal: 2, theme: "auto", lastBackupAt: null }
   };
 }
 
@@ -61,6 +69,7 @@ export function migrate(raw, now) {
   const s = Object.assign(createState(now), raw);
   s.notes = raw.notes && typeof raw.notes === "object" ? raw.notes : {};
   if (!Number.isInteger(s.seed) || s.seed < 0) s.seed = newSeed();   // older pets get their own look once
+  s.traits = cleanTraits(raw.traits);
   s.invite = cleanInvite(raw.invite);
   s.album = Array.isArray(raw.album) ? raw.album.map(cleanAlbumEntry).filter(Boolean).slice(-200) : [];
   // Saves from before the certificate: the best streak is at least the current one,
@@ -75,6 +84,13 @@ export function migrate(raw, now) {
   s.days = {};
   if (raw.days && typeof raw.days === "object")
     for (const [k, v] of Object.entries(raw.days)) if (Number.isFinite(v) && v > 0) s.days[k] = v;
+  s.daySessions = {};
+  if (raw.daySessions && typeof raw.daySessions === "object")
+    for (const [k, v] of Object.entries(raw.daySessions)) if (Number.isInteger(v) && v > 0) s.daySessions[k] = v;
+  s.bestCatches = Number.isInteger(raw.bestCatches) && raw.bestCatches > 0 ? raw.bestCatches : 0;
+  s.restDays = Number.isInteger(raw.restDays) ? Math.max(0, Math.min(MAX_REST, raw.restDays)) : 0;
+  if (!GOALS.includes(s.settings.goal)) s.settings.goal = 2;
+  if (!THEMES.includes(s.settings.theme)) s.settings.theme = "auto";
   s.settings = Object.assign(createState(now).settings, raw.settings || {});
   if (!raw.version) s.onBreak = null;
   s.version = SAVE_VERSION;
@@ -91,13 +107,24 @@ export function stageIndex(s) {
   STAGES.forEach((st, k) => { if (s.sessions >= st.at) i = k; });
   return i;
 }
-// The streak counts if the last study day was today or yesterday.
+// Calendar days since the last study day (0 = today).
+function daysSinceStudy(s, now) {
+  if (s.lastStudyAt) return daysAgo(s.lastStudyAt, now);
+  return s.lastDay === dayKey(now) ? 0 : s.lastDay === prevDayKey(now) ? 1 : Infinity;   // saves from before lastStudyAt
+}
+// The streak counts if the last study day was today or yesterday, or if saved
+// rest days can cover the days missed since.
 export function streakNow(s, now) {
   if (!s.lastDay) return 0;
-  return (s.lastDay === dayKey(now) || s.lastDay === prevDayKey(now)) ? s.streak : 0;
+  return daysSinceStudy(s, now) <= 1 + s.restDays ? s.streak : 0;
+}
+// Today's progress toward the daily goal.
+export function goalToday(s, now) {
+  const goal = s.settings.goal, done = s.daySessions[dayKey(now)] || 0;
+  return { goal, done, met: goal > 0 && done >= goal };
 }
 export function mood(s, now) {
-  if (s.active) return "focus";
+  if (s.active) return s.active.pausedAt ? "paused" : "focus";
   if (s.onBreak) return "break";
   if (stageIndex(s) === 0) return "egg";
   const idle = s.lastStudyAt ? now - s.lastStudyAt : 0;
@@ -133,7 +160,25 @@ export function petLook(s) {
   const r = seeded(s.seed);
   const look = {};
   for (const [trait, options] of Object.entries(TRAITS)) look[trait] = options[Math.floor(r() * options.length)];
-  return look;
+  return Object.assign(look, cleanTraits(s.traits));   // habits override the seed
+}
+function cleanTraits(raw) {
+  const out = {};
+  if (raw && typeof raw === "object") for (const [k, v] of Object.entries(raw)) if (TRAITS[k] && TRAITS[k].includes(v)) out[k] = v;
+  return out;
+}
+
+// How the person studies can decide a trait when the pet reaches its stage:
+// the result is locked in then, so later habits don't change it.
+export const STAGE_TRAIT = { 2: "ears", 3: "tail", 4: "topper" };
+export function habitTrait(s, trait) {
+  const avg = s.sessions ? s.minutes / s.sessions : 0;
+  if (trait === "ears" && avg >= 40) return { value: "bunny", reason: "from all those long sessions" };
+  if (trait === "ears" && s.sessions && avg <= 15) return { value: "antennae", reason: "from all those quick sessions" };
+  if (trait === "tail" && s.bestStreak >= 5) return { value: "fluffy", reason: `from studying ${s.bestStreak} days in a row` };
+  if (trait === "topper" && s.bestStreak >= 7) return { value: "star", reason: `for that ${s.bestStreak}-day streak` };
+  if (trait === "topper" && s.minutes >= 600) return { value: "leaves", reason: "from 10 hours of focus" };
+  return null;
 }
 
 // Words for the growth messages and the certificate.
@@ -181,6 +226,22 @@ export function startFocus(s, now, unitMs) {
   s.active = { minutes: s.length, startedAt: now, endAt: now + s.length * unitMs, unitMs };
 }
 export function stopFocus(s) { s.active = null; }
+// A pause freezes the timer; resuming pushes the end back by the time paused.
+export function pauseFocus(s, now) {
+  const a = s.active;
+  if (!a || a.pausedAt || a.pauseUsed) return false;
+  a.pausedAt = now; a.pauseUsed = true;
+  return true;
+}
+export function resumeFocus(s, now) {
+  const a = s.active;
+  if (!a || !a.pausedAt) return;
+  a.endAt += Math.min(now, a.pausedAt + PAUSE_MAX * a.unitMs) - a.pausedAt;
+  a.pausedAt = null;
+}
+// Time left on the focus timer, frozen while paused.
+export const focusLeft = (s, now) => s.active.endAt - (s.active.pausedAt || now);
+export const pauseLeft = (s, now) => s.active.pausedAt + PAUSE_MAX * s.active.unitMs - now;
 export function endBreak(s) { s.onBreak = null; }
 
 // Credit a finished session. Uses the session's own end time, so a session
@@ -196,9 +257,15 @@ export function completeFocus(s, notesList) {
   s.heartsAt = t;
   const today = dayKey(t);
   s.days[today] = (s.days[today] || 0) + a.minutes;
+  s.daySessions[today] = (s.daySessions[today] || 0) + 1;
+  let restUsed = 0, restEarned = false;
   if (s.lastDay !== today) {
-    s.streak = s.lastDay === prevDayKey(t) ? s.streak + 1 : 1;
+    const missed = s.lastDay ? daysSinceStudy(s, t) - 1 : Infinity;
+    if (missed === 0) s.streak += 1;
+    else if (missed <= s.restDays) { restUsed = missed; s.restDays -= missed; s.streak += 1; }   // rest days cover the gap
+    else s.streak = 1;
     s.lastDay = today;
+    if (s.streak % REST_EVERY === 0 && s.restDays < MAX_REST) { s.restDays += 1; restEarned = true; }
   } else if (!s.streak) s.streak = 1;
   s.lastStudyAt = t;
   s.bestStreak = Math.max(s.bestStreak, s.streak);
@@ -207,11 +274,22 @@ export function completeFocus(s, notesList) {
   s.onBreak = { minutes: breakMinutes, endAt: t + breakMinutes * (a.unitMs || 60000) };
   const after = stageIndex(s);
   if (after === STAGES.length - 1 && !s.grownAt) s.grownAt = t;
-  return { grewTo: after > before ? after : null, notes: unlockNotes(s, t, notesList), breakMinutes };
+  let growReason = "";
+  for (let st = before + 1; st <= after; st++) {
+    const trait = STAGE_TRAIT[st], habit = trait && !s.traits[trait] ? habitTrait(s, trait) : null;
+    if (habit) { s.traits[trait] = habit.value; growReason = habit.reason; }
+  }
+  const goal = s.settings.goal, goalMet = goal > 0 && s.daySessions[today] === goal;
+  return { grewTo: after > before ? after : null, growReason, notes: unlockNotes(s, t, notesList), breakMinutes, goalMet, restUsed, restEarned };
 }
 
 // Called many times a second. Returns an event when a timer runs out, else null.
 export function tickState(s, now, notesList) {
+  if (s.active && s.active.pausedAt) {
+    if (pauseLeft(s, now) > 0) return null;
+    resumeFocus(s, now);
+    return { type: "pauseOver" };
+  }
   if (s.active && now >= s.active.endAt) {
     const r = completeFocus(s, notesList);
     r.breakSkipped = false;
@@ -225,6 +303,29 @@ export function tickState(s, now, notesList) {
   return null;
 }
 
+/* ---------- Break game ---------- */
+// During a break the pet bounces a ball. Catching it as it lands builds a run of
+// catches; a mistimed catch ends the run. One catch per bounce.
+const BALL_MS = 350;                                   // the ball's height is |cos(now / 350)|
+export const ballHeight = now => Math.round(Math.abs(Math.cos(now / BALL_MS)) * 12);   // pixels above the ground
+export const CATCH_HEIGHT = 3;                         // close enough to the ground to catch
+const bounceOf = now => Math.floor(now / BALL_MS / Math.PI);   // which bounce: each runs peak to peak, landing in the middle
+// still: the ball isn't moving (reduced motion), so every try counts.
+export function tryCatch(s, now, still) {
+  const b = s.onBreak;
+  if (!b) return null;
+  const bounce = bounceOf(now);
+  if (!still && (ballHeight(now) > CATCH_HEIGHT || b.lastBounce === bounce)) {
+    b.catches = 0;
+    return { caught: false, catches: 0, best: s.bestCatches };
+  }
+  b.lastBounce = bounce;
+  b.catches = (b.catches || 0) + 1;
+  const best = b.catches > s.bestCatches;
+  if (best) s.bestCatches = b.catches;
+  return { caught: true, catches: b.catches, best: s.bestCatches, newBest: best };
+}
+
 /* ---------- History ---------- */
 // The last 7 calendar days, oldest first, ending today.
 export function lastWeek(s, now) {
@@ -232,7 +333,7 @@ export function lastWeek(s, now) {
   d.setDate(d.getDate() - 6);
   for (let k = 0; k < 7; k++) {
     const key = dayKey(d.getTime());
-    out.push({ key, time: d.getTime(), minutes: s.days[key] || 0 });
+    out.push({ key, time: d.getTime(), minutes: s.days[key] || 0, sessions: s.daySessions[key] || 0 });
     d.setDate(d.getDate() + 1);
   }
   return out;
@@ -268,11 +369,12 @@ export function certificate(s, notesList) {
   const goal = STAGES[STAGES.length - 1].at;
   return {
     earned: !!s.grownAt, goal, progress: Math.min(s.sessions, goal),
-    name: s.name, seed: s.seed, accessory: accessory(s),
+    name: s.name, seed: s.seed, traits: { ...s.traits }, accessory: accessory(s),
     sessions: s.sessions, minutes: s.minutes, bestStreak: s.bestStreak,
     notes: notesList.filter(n => s.notes[n.id]).length, totalNotes: notesList.length,
     since: s.firstStudyAt, grownAt: s.grownAt,
-    letter: (s.invite && s.invite.letter) || "", letterFrom: (s.invite && s.invite.from) || ""
+    letter: (s.invite && s.invite.letter) || "", letterFrom: (s.invite && s.invite.from) || "",
+    invitedBy: (s.invite && s.invite.from) || ""
   };
 }
 
@@ -285,9 +387,10 @@ function cleanAlbumEntry(e) {
   if (!e || typeof e !== "object" || typeof e.name !== "string" || !Number.isInteger(e.seed)
       || ![e.sessions, e.minutes, e.bestStreak, e.notes, e.totalNotes, e.grownAt].every(isNum)) return null;
   const text = v => (typeof v === "string" ? v : "");
-  return { earned: true, name: e.name.slice(0, 16), seed: e.seed >>> 0, accessory: ACCESSORIES.includes(e.accessory) ? e.accessory : null,
+  return { earned: true, name: e.name.slice(0, 16), seed: e.seed >>> 0, traits: cleanTraits(e.traits), accessory: ACCESSORIES.includes(e.accessory) ? e.accessory : null,
     sessions: e.sessions, minutes: e.minutes, bestStreak: e.bestStreak, notes: e.notes, totalNotes: e.totalNotes,
-    since: isNum(e.since) ? e.since : null, grownAt: e.grownAt, letter: text(e.letter).slice(0, 400), letterFrom: text(e.letterFrom).slice(0, 24) };
+    since: isNum(e.since) ? e.since : null, grownAt: e.grownAt, letter: text(e.letter).slice(0, 400), letterFrom: text(e.letterFrom).slice(0, 24),
+    invitedBy: text(e.invitedBy).slice(0, 24) };
 }
 export function startNewPet(s, petName, now, notesList, random = Math.random) {
   if (!s.grownAt) throw new Error("Only a fully grown pet can move into the album.");
@@ -295,7 +398,7 @@ export function startNewPet(s, petName, now, notesList, random = Math.random) {
   delete c.goal; delete c.progress;
   s.album.push(c);
   Object.assign(s, {
-    name: petName, seed: newSeed(random), sessions: 0, minutes: 0, hearts: 3, heartsAt: now,
+    name: petName, seed: newSeed(random), traits: {}, sessions: 0, minutes: 0, hearts: 3, heartsAt: now,
     notes: {}, bestStreak: s.streak, firstStudyAt: null, grownAt: null, certSeen: false, active: null, onBreak: null
   });
   // The inviter's P.S. lines and sealed message were for the first pet; they stay on its certificate.

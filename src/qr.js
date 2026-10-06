@@ -2,6 +2,7 @@
 // It follows the QR standard (ISO/IEC 18004), modeled on Project Nayuki's
 // reference implementation, trimmed to what the app needs.
 // qrEncode(bytes) returns a square array of rows of booleans (true = dark).
+// Its output matches the widely used `qrcode` npm package module for module (see tests).
 
 const QR_ECC_PER_BLOCK = [-1, 7, 10, 15, 20, 26, 18, 20, 24, 30, 18, 20, 24, 26, 30, 22, 24, 28, 30, 28, 28, 28, 28, 30, 30, 26, 28, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30, 30];
 const QR_BLOCKS = [-1, 1, 1, 1, 1, 1, 2, 2, 2, 2, 4, 4, 4, 4, 4, 6, 6, 6, 6, 7, 8, 8, 9, 9, 10, 12, 12, 12, 13, 14, 15, 16, 17, 18, 19, 19, 20, 21, 22, 24, 25];
@@ -17,8 +18,9 @@ function qrRawModules(ver) {
   return result;
 }
 const qrDataCodewords = ver => Math.floor(qrRawModules(ver) / 8) - QR_ECC_PER_BLOCK[ver] * QR_BLOCKS[ver];
-// The most bytes a code can hold (version 40).
-export const QR_MAX_BYTES = qrDataCodewords(40) - 3;
+// The most bytes a code of a given version can hold (byte mode header included).
+export const qrMaxBytes = ver => Math.floor((qrDataCodewords(ver) * 8 - 4 - (ver <= 9 ? 8 : 16)) / 8);
+export const QR_MAX_BYTES = qrMaxBytes(40);
 
 /* Reed-Solomon error correction over GF(2^8) */
 function gfMul(x, y) {
@@ -49,12 +51,14 @@ function rsRemainder(data, divisor) {
   return result;
 }
 
-export function qrEncode(bytes) {
+// `mask` is for tests: it skips choosing the best of the eight mask patterns.
+export function qrEncode(bytes, mask = -1) {
   // Smallest version that fits: 4-bit mode, character count, then the bytes.
   let ver = 1;
   const countBits = v => (v <= 9 ? 8 : 16);
   while (ver <= 40 && 4 + countBits(ver) + bytes.length * 8 > qrDataCodewords(ver) * 8) ver++;
   if (ver > 40) throw new Error("Too much data for a QR code.");
+  if (ver === 23) ver = 24;   // jsQR, used by some web scanners, can't read version 23 codes
 
   // Bit stream: byte mode, length, data, terminator, padding.
   const bits = [];
@@ -149,6 +153,7 @@ export function qrEncode(bytes) {
     if (score < bestScore) { best = m; bestScore = score; }
     applyMask(m);
   }
+  if (mask >= 0) best = mask;
   applyMask(best); drawFormat(best);
   return dark;
 }

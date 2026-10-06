@@ -1,13 +1,13 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { NOTES, LENGTHS, DOG_NAMES } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, newFeature, describeLook, startNewPet, lifetime } from "./engine.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, pauseFocus, resumeFocus, focusLeft, pauseLeft, PAUSE_MAX, THEMES, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, tryCatch, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, STAGE_TRAIT, newFeature, describeLook, startNewPet, lifetime } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { drawCard } from "./card.js";
 import { qrEncode, QR_MAX_BYTES } from "./qr.js";
 import { encodeMove, decodeMove } from "./move.js";
-import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing, wakeLockSupported, keepAwake } from "./alerts.js";
+import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing, wakeLockSupported, keepAwake, vibrateSupported, buzz } from "./alerts.js";
 import { registerServiceWorker, watchInstall, promptInstall, isIOS, isInstalled } from "./pwa.js";
 
 const $ = id => document.getElementById(id);
@@ -16,7 +16,7 @@ let state = migrate(store.load(), Date.now());
 
 const canvas = $("screen"), ctx = canvas.getContext("2d");
 const RM = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
-let testMode = false, patAt = 0, hatchAt = 0, growAt = 0, stopArmed = 0, resetArmed = 0;
+let catchAt = 0, testMode = false, patAt = 0, hatchAt = 0, growAt = 0, stopArmed = 0, resetArmed = 0;
 let downloads = null, notesSig = "";
 const unitMs = () => (testMode ? 1000 : 60000);
 // Test mode plays with a copy that is never saved, so practice runs can't
@@ -32,7 +32,7 @@ function protectProgress() {
 
 const MOOD_TEXT = {
   egg: "Study once to hatch", happy: "Happy", hungry: "Hungry, time to study",
-  sleepy: "Sleepy, misses you", focus: "Studying with you", break: "Break time, play!"
+  sleepy: "Sleepy, misses you", focus: "Studying with you", break: "Break! Catch the ball", paused: "Paused, waiting for you"
 };
 const nameOr = () => state.name || "Your pet";
 function fmt(ms) {
@@ -53,6 +53,7 @@ function fmtMinutes(total) {
 /* ---------- Timer events ---------- */
 function alertUser(title, body, tones) {
   if (state.settings.sound) playChime(tones);
+  if (state.settings.vibrate && vibrateSupported()) buzz([200, 100, 200]);
   if (document.hidden) {
     if (state.settings.notify) sendNotification(title, body);
     flashTitle(title, "Study Pet");
@@ -65,15 +66,23 @@ function handleEvent(ev) {
     const isNew = ev.grewTo ? newFeature(petLook(state), ev.grewTo, isPuppy(state, DOG_NAMES)) : "";   // each stage shows off something new
     if (ev.grewTo === 1) { hatchAt = Date.now(); text = `${nameOr()} hatched! It's ${isNew}.`; }
     else if (ev.grewTo) {
-      growAt = Date.now(); text = `${nameOr()} grew into a ${STAGES[ev.grewTo].name}${isNew ? ` and has ${isNew}` : ""}!`;
+      const why = ev.growReason && !(isPuppy(state, DOG_NAMES) && STAGE_TRAIT[ev.grewTo] === "ears") ? `, ${ev.growReason}` : "";   // puppies keep floppy ears
+      growAt = Date.now(); text = `${nameOr()} grew into a ${STAGES[ev.grewTo].name}${isNew ? ` and has ${isNew}${why}` : ""}!`;
       if (ev.grewTo === STAGES.length - 1) text += " Your certificate is unsealed. Find it under Notes.";
     }
     else text = `Session done. ${nameOr()} had a snack.`;
     if (ev.notes.length) text += ` You unlocked ${ev.notes.length === 1 ? "a note" : ev.notes.length + " notes"}.`;
+    if (ev.goalMet) { text += ` Daily goal reached! ${nameOr()} is so proud of you.`; if (!ev.grewTo) growAt = Date.now(); }
+    if (ev.restUsed) text += ` A rest day kept your ${state.streak}-day streak going.`;
+    if (ev.restEarned) text += ` ${REST_EVERY} days in a row earned you a rest day for a day you miss.`;
     if (!ev.breakSkipped) text += ` Enjoy a ${ev.breakMinutes}-minute break.`;
     say(text);
     alertUser("Session complete!", text, [660, 880, 1320]);
     protectProgress();
+  } else if (ev.type === "pauseOver") {
+    const text = `The ${PAUSE_MAX}-${testMode ? "second" : "minute"} pause is over, so the timer is running again.`;
+    say(text);
+    alertUser("Back to it", text, [660, 880]);
   } else if (ev.type === "breakDone") {
     const text = `Break's over. ${nameOr()} is ready when you are.`;
     say(text);
@@ -119,13 +128,13 @@ function renderNotes() {
 function render() {
   const now = Date.now(), m = mood(state, now), st = stageIndex(state);
   const unread = unreadNotes(state, NOTES);
-  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, rm: RM, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state) });
+  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, catchAt, rm: RM, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state) });
   canvas.setAttribute("aria-label", `${nameOr()}, ${STAGES[st].name}, ${MOOD_TEXT[m].toLowerCase()}${unread ? ", new note waiting" : ""}`);
 
   let title = "Study Pet";
   if (state.active) {
-    const left = fmt(state.active.endAt - now);
-    $("big").textContent = left; title = `${left} Study Pet`;
+    const left = fmt(focusLeft(state, now));
+    $("big").textContent = left; title = state.active.pausedAt ? `Paused ${left}` : `${left} Study Pet`;
   } else if (state.onBreak) {
     const left = fmt(state.onBreak.endAt - now);
     $("big").textContent = left; title = `${left} Break`;
@@ -133,11 +142,16 @@ function render() {
     $("big").textContent = nameOr();
   }
   if (!isFlashing()) document.title = title;
-  $("small").textContent = now - hatchAt < HATCH_MS ? "Hatching!" : MOOD_TEXT[m];
+  $("small").textContent = now - hatchAt < HATCH_MS ? "Hatching!"
+    : m === "paused" ? `Paused, resumes in ${fmt(pauseLeft(state, now))}`
+    : m === "break" && state.onBreak.catches ? `${state.onBreak.catches} in a row!` : MOOD_TEXT[m];
+  $("patLbl").textContent = m === "break" ? "Catch" : "Pat";
 
   $("focusLbl").textContent = state.active ? (now < stopArmed ? "Sure?" : "Stop")
                             : state.onBreak ? "Next round" : "Focus";
-  $("keyLength").disabled = !!state.active;
+  // During a session the middle key pauses (once) and resumes.
+  $("lengthLbl").textContent = !state.active ? "Length" : state.active.pausedAt ? "Resume" : "Pause";
+  $("keyLength").disabled = !!state.active && state.active.pauseUsed && !state.active.pausedAt;
   document.querySelectorAll("#chips input").forEach(i => { i.disabled = !!state.active; i.checked = +i.value === state.length; });
 
   $("petName").textContent = nameOr();
@@ -146,6 +160,9 @@ function render() {
   $("dedication").textContent = inv ? (inv.to ? `For ${inv.to}, from ${inv.from}` : `Invited by ${inv.from}`) : "";
   $("dedication").hidden = !inv;
   $("stStreak").textContent = streakNow(state, now);
+  $("stRest").textContent = state.restDays ? `${state.restDays} rest ${state.restDays === 1 ? "day" : "days"} saved` : "";
+  $("stRest").hidden = !state.restDays;
+  renderGoal(now);
   const total = lifetime(state);   // across every pet raised
   $("stSessions").textContent = total.sessions;
   $("stTime").textContent = fmtMinutes(total.minutes);
@@ -185,7 +202,7 @@ const shortDate = t => new Date(t).toLocaleDateString(undefined, { month: "short
 
 // The grown pet from a certificate (or album entry), standing still, on any canvas.
 function drawPortrait(canvas, c) {
-  const pet = { name: c.name, seed: c.seed };
+  const pet = { name: c.name, seed: c.seed, traits: c.traits };
   draw(canvas.getContext("2d"), { now: 1300, mood: "happy", stage: STAGES.length - 1, hearts: 0, unread: 0,
     hatchAt: -1e12, growAt: -1e12, patAt: -1e12, rm: true, portrait: true,
     dog: isPuppy(pet, DOG_NAMES), accessory: c.accessory, look: petLook(pet) });
@@ -207,10 +224,12 @@ function openCertificate(c) {
     div.append(dt, dd); $("certStats").appendChild(div);
   });
   $("certSigned").textContent = `Signed, ${pet}${puppy ? " (woof!)" : ""}`;
+  $("certInvited").textContent = c.invitedBy ? `Invited to Study Pet by ${c.invitedBy}` : "";
+  $("certInvited").hidden = !c.invitedBy;
   $("certMsg").textContent = c.letter ? `“${c.letter}”\nFrom ${c.letterFrom}` : "";
   $("certMsg").hidden = !c.letter;
   drawPortrait($("certPet"), c);
-  $("certLook").textContent = describeLook(petLook({ seed: c.seed }), puppy);
+  $("certLook").textContent = describeLook(petLook({ seed: c.seed, traits: c.traits }), puppy);
   const current = c.seed === state.seed && !state.album.includes(c);
   $("certNewPet").hidden = !current;                 // only the current pet can move into the album
   if (current) { state.certSeen = true; save(); }
@@ -323,7 +342,7 @@ let weekSig = "";
 const BAR_MAX = 64;   // px; the column leaves room above for the cap label
 function renderWeek(now) {
   const week = lastWeek(state, now);
-  const sig = dayKey(now) + JSON.stringify(week.map(d => d.minutes));
+  const sig = dayKey(now) + JSON.stringify(week.map(d => [d.minutes, d.sessions])) + state.settings.goal;
   if (sig === weekSig) return;
   weekSig = sig;
 
@@ -340,7 +359,7 @@ function renderWeek(now) {
 
     const day = document.createElement("div");
     day.className = "week-day" + (today ? " today" : "");
-    day.dataset.tip = `${long}: ${d.minutes ? fmtMinutes(d.minutes) : "no focus time"}`;
+    day.dataset.tip = `${long}: ${d.minutes ? fmtMinutes(d.minutes) : "no focus time"}${state.settings.goal && d.sessions >= state.settings.goal ? ", goal met" : ""}`;
     const col = document.createElement("div");
     col.className = "week-col";
     if (d.minutes) {
@@ -443,12 +462,32 @@ $("keyFocus").addEventListener("click", () => {
   render();
 });
 $("keyLength").addEventListener("click", () => {
-  if (state.active) return;
+  if (state.active) {
+    const now = Date.now();
+    if (state.active.pausedAt) { resumeFocus(state, now); say("Back to it. The timer is running again."); }
+    else if (pauseFocus(state, now)) say(`Paused. You have up to ${PAUSE_MAX} ${testMode ? "seconds" : "minutes"}; the timer resumes on its own after that.`);
+    save(); render();
+    return;
+  }
   state.length = LENGTHS[(LENGTHS.indexOf(state.length) + 1) % LENGTHS.length] || 25;
   save(); render();
 });
+// During a break, the Pat key (or a tap on the screen) catches the ball instead.
+function catchBall() {
+  const r = tryCatch(state, Date.now(), RM);
+  if (!r) return false;
+  if (r.caught) {
+    catchAt = Date.now();
+    if (state.settings.sound) playChime([1320]);
+    if (r.newBest && r.catches > 1) say(`${r.catches} catches in a row, a new best!`);
+  } else say(r.best ? `Missed! Catch it just as it lands. Your best is ${r.best} in a row.` : "Missed! Catch the ball just as it lands.");
+  save(); render();
+  return true;
+}
+$("screen").addEventListener("pointerdown", () => { if (state.onBreak) { unlockAudio(); catchBall(); } });
 $("keyPat").addEventListener("click", () => {
   unlockAudio();
+  if (state.onBreak && catchBall()) return;
   patAt = Date.now();
   if (stageIndex(state) === 0) say("The egg wiggles. Something is in there.");
   render();
@@ -465,12 +504,42 @@ LENGTHS.forEach(n => {
   $("chips").appendChild(label);
 });
 
+/* ---------- Daily goal ---------- */
+function renderGoal(now) {
+  const g = goalToday(state, now);
+  $("goalLine").hidden = !g.goal;
+  if (!g.goal) return;
+  const dots = $("goalDots");
+  if (dots.childElementCount !== Math.max(g.goal, g.done) || dots.dataset.done !== String(g.done)) {
+    dots.innerHTML = "";
+    for (let i = 0; i < Math.max(g.goal, g.done); i++) {
+      const dot = document.createElement("span");
+      dot.className = i < g.done ? "on" : "";
+      dots.appendChild(dot);
+    }
+    dots.dataset.done = g.done;
+  }
+  $("goalText").textContent = g.met ? `Today's goal done: ${g.done} of ${g.goal} sessions` : `Today: ${g.done} of ${g.goal} sessions`;
+}
+GOALS.forEach(n => {
+  const label = document.createElement("label"), input = document.createElement("input"), span = document.createElement("span");
+  input.type = "radio"; input.name = "goal"; input.value = n;
+  span.textContent = n ? `${n} a day` : "Off";
+  label.append(input, span);
+  input.addEventListener("change", () => { state.settings.goal = n; save(); render(); });
+  $("goalChips").appendChild(label);
+});
+
 /* ---------- Settings ---------- */
 // Match the checkboxes to the current state, after loading, restoring, resetting or switching test mode.
 function syncSettings() {
   $("soundToggle").checked = state.settings.sound;
   if (notifySupported()) $("notifyToggle").checked = state.settings.notify && Notification.permission === "granted";
   $("awakeToggle").checked = state.settings.awake;
+  $("vibrateToggle").checked = state.settings.vibrate;
+  document.querySelectorAll("#themeChips input").forEach(i => { i.checked = i.value === state.settings.theme; });
+  applyTheme();
+  document.querySelectorAll('#goalChips input').forEach(i => { i.checked = +i.value === state.settings.goal; });
 }
 syncSettings();
 $("soundToggle").addEventListener("change", e => {
@@ -491,6 +560,24 @@ else {
 }
 
 if (!wakeLockSupported()) $("awakeRow").hidden = true;
+if (!vibrateSupported()) $("vibrateRow").hidden = true;
+$("vibrateToggle").addEventListener("change", e => { state.settings.vibrate = e.target.checked; save(); if (e.target.checked) buzz(80); });
+
+// Theme: follow the device, or always light or dark.
+function applyTheme() {
+  const t = state.settings.theme;
+  if (t === "auto") delete document.documentElement.dataset.theme;
+  else document.documentElement.dataset.theme = t;
+}
+THEMES.forEach(t => {
+  const label = document.createElement("label"), input = document.createElement("input"), span = document.createElement("span");
+  input.type = "radio"; input.name = "theme"; input.value = t;
+  span.textContent = t === "auto" ? "Match device" : t[0].toUpperCase() + t.slice(1);
+  label.append(input, span);
+  input.addEventListener("change", () => { state.settings.theme = t; save(); applyTheme(); });
+  $("themeChips").appendChild(label);
+});
+syncSettings();   // the theme choices exist now, so mark the current one
 $("awakeToggle").addEventListener("change", e => {
   state.settings.awake = e.target.checked; save();
   if (e.target.checked) say("The screen will stay on while a timer runs, so you'll hear when it's done.");
@@ -563,11 +650,19 @@ function setTestMode(on) {
          : `Test mode off. Back to ${nameOr()}'s real progress.`);
   render();
 }
+// Keyboard shortcuts, outside text fields and dialogs (where keys already do things):
+// Space starts or stops, P pauses or resumes, L changes the length, T toggles test mode.
 document.addEventListener("keydown", e => {
-  if ((e.key === "t" || e.key === "T") && !/input|textarea/i.test(e.target.tagName)
-      && !state.active && !document.querySelector("dialog[open]")) {
-    setTestMode(!testMode);
+  if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector("dialog[open]")) return;
+  if (e.target.closest && e.target.closest("input, textarea, select")) return;
+  const key = e.key.toLowerCase();
+  if (key === " ") {
+    if (e.target.closest && e.target.closest("button, a, label")) return;   // Space already presses a focused button
+    e.preventDefault(); $("keyFocus").click();
   }
+  else if (key === "p" && state.active) $("keyLength").click();
+  else if (key === "l" && !state.active) $("keyLength").click();
+  else if (key === "t" && !state.active) setTestMode(!testMode);
 });
 
 /* Downloads only exist when the page is published on claude.ai; elsewhere this stays null. */
@@ -762,7 +857,9 @@ $("moveAskDlg").addEventListener("close", () => { pendingMove = null; if (!state
 window.addEventListener("hashchange", receiveMove);
 
 /* ---------- Installing ---------- */
-registerServiceWorker();
+// When a new version takes over, offer a refresh rather than reloading mid-session.
+registerServiceWorker(() => { $("updateBanner").hidden = false; });
+$("updateBtn").addEventListener("click", () => { save(); location.reload(); });
 watchInstall(can => { $("installBtn").hidden = !can; });
 $("installBtn").addEventListener("click", async () => {
   if (await promptInstall()) say(`${nameOr()} has a home on your device now.`);

@@ -71,10 +71,14 @@ After the first visit, the app opens without an internet connection.
   Home Screen app; use **Paste an invite link** there.
 - Every pet gets a random seed when it is created that picks its shape, markings, ears, tail and topper,
   revealed one stage at a time, so no two pets grow up alike (see `TRAITS` in `src/engine.js`).
+  Study habits can decide the later traits as they arrive: long or quick sessions shape the ears, a 5-day
+  streak gives a fluffy tail, and a 7-day streak or 10 hours of focus decides the topper (`habitTrait`).
   A pet named Lila or Daisy is a puppy (`DOG_NAMES` in `src/config.js`).
 - The certificate unseals when the pet is fully grown (20 sessions) and can be printed or saved as a PDF.
   After that, **Raise a new pet** moves the grown pet into the Album (with its certificate) and brings a new egg.
 - **Move to another device** (Settings) shows a QR code; scanning it opens the app there and moves the pet
   after confirming. "Copy link" and "Paste a link" cover devices that can't scan, like moving between
   Safari and the Home Screen app on iPhone.
+- During a session the middle key pauses it once, for up to 5 minutes. On a keyboard: Space starts or stops,
+  P pauses, L changes the length. Settings has a theme switch and, on phones, vibration.
 - Run `npm test` and `npm run test:browser` before every commit.

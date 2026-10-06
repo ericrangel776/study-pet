@@ -36,6 +36,11 @@ test("a first visit asks for the pet's name", async ({ page }) => {
   await expect(page.locator("#small")).toHaveText("Study once to hatch");
 });
 
+test("the page carries its dedication", async ({ page }) => {
+  await open(page, { save: petSave() });
+  await expect(page.locator("footer")).toHaveText("Dedicated to Haylee :)");
+});
+
 test("a first visit needs the person's name, and greets them by it", async ({ page }) => {
   await open(page);
   await page.locator("#nameInput").fill("Mochi");
@@ -151,6 +156,134 @@ test("naming the pet Lila or Daisy turns it into a puppy", async ({ page }) => {
   expect(await frame()).toBe(blob);
 });
 
+test.describe("session comforts", () => {
+  test("the middle key pauses once, and resumes", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await expect(page.locator("#lengthLbl")).toHaveText("Pause");
+    await page.clock.fastForward("05:00");
+    await page.locator("#keyLength").click();
+    await expect(page.locator("#lengthLbl")).toHaveText("Resume");
+    await expect(page.locator("#small")).toContainText("Paused, resumes in");
+    await page.clock.fastForward("02:00");
+    await expect(page.locator("#big")).toHaveText("10:00");             // frozen while paused
+    await page.locator("#keyLength").click();
+    await expect(page.locator("#keyLength")).toBeDisabled();             // the one pause is used
+    await page.clock.fastForward("10:01");
+    await expect(page.locator("#msg")).toContainText("Enjoy a 5-minute break");   // the session finished
+  });
+
+  test("keyboard shortcuts start, pause and change the length", async ({ page, isMobile }) => {
+    test.skip(isMobile, "shortcuts are for keyboards");
+    await open(page, { save: petSave() });
+    await page.locator("body").click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press("l");
+    await expect(page.getByRole("radio", { name: "45 min" })).toBeChecked();
+    await page.keyboard.press("Space");
+    await expect(page.locator("#focusLbl")).toHaveText("Stop");
+    await page.keyboard.press("p");
+    await expect(page.locator("#lengthLbl")).toHaveText("Resume");
+    await page.keyboard.press("p");
+    await page.keyboard.press("Space");
+    await page.keyboard.press("Space");
+    await expect(page.locator("#msg")).toContainText("Stopped early");
+  });
+
+  test("the theme can follow the device or stay light or dark", async ({ page }) => {
+    await open(page, { save: petSave() });
+    const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
+    await page.emulateMedia({ colorScheme: "light" });
+    await page.locator("#themeChips").getByRole("radio", { name: "Dark" }).check();
+    expect(await bg()).toBe("rgb(28, 25, 40)");
+    await page.reload();
+    expect(await bg()).toBe("rgb(28, 25, 40)");                          // remembered
+    await expect(page.locator("#themeChips").getByRole("radio", { name: "Dark" })).toBeChecked();
+    await page.locator("#themeChips").getByRole("radio", { name: "Match device" }).check();
+    expect(await bg()).toBe("rgb(238, 234, 248)");
+  });
+
+  test("phones buzz when a timer ends", async ({ page }) => {
+    await page.addInitScript(() => {
+      window.buzzes = [];
+      navigator.vibrate = p => { window.buzzes.push(p); return true; };
+      const mm = window.matchMedia.bind(window);
+      window.matchMedia = q => (q === "(pointer: coarse)" ? { matches: true, addEventListener() {} } : mm(q));
+    });
+    await open(page, { save: petSave() });
+    await expect(page.locator("#vibrateToggle")).toBeChecked();
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+    await expect(page.locator("#msg")).toContainText("Enjoy a 5-minute break");
+    expect(await page.evaluate(() => window.buzzes)).toContainEqual([200, 100, 200]);
+  });
+});
+
+test("during a break, Catch plays the ball game", async ({ page }) => {
+  await open(page, { save: petSave() });
+  await page.getByRole("radio", { name: "15 min" }).check();
+  await page.locator("#keyFocus").click();
+  await page.clock.fastForward("15:01");
+  await expect(page.locator("#patLbl")).toHaveText("Catch");
+  await expect(page.locator("#small")).toHaveText("Break! Catch the ball");
+  // Freeze time at the next two landings and catch.
+  const now = await page.evaluate(() => Date.now());
+  const k = Math.ceil((now / 350 - Math.PI / 2) / Math.PI) + 2;
+  for (const i of [0, 1]) {
+    await page.clock.pauseAt(new Date(Math.round(350 * (Math.PI / 2 + (k + i) * Math.PI))));
+    await page.locator("#keyPat").click();
+  }
+  await expect(page.locator("#small")).toHaveText("2 in a row!");
+  await expect(page.locator("#msg")).toHaveText("2 catches in a row, a new best!");
+  await page.locator("#keyPat").click();                                   // again on the same bounce: a miss
+  await expect(page.locator("#msg")).toContainText("Missed! Catch it just as it lands. Your best is 2 in a row.");
+  expect((await saved(page)).bestCatches).toBe(2);
+});
+
+test.describe("daily goal and rest days", () => {
+  const session = async page => {
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+  };
+
+  test("two sessions reach the default goal, and the week chart notes it", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await expect(page.locator("#goalText")).toHaveText("Today: 0 of 2 sessions");
+    await session(page);
+    await expect(page.locator("#goalText")).toHaveText("Today: 1 of 2 sessions");
+    await expect(page.locator("#goalDots .on")).toHaveCount(1);
+    await page.clock.fastForward("05:01");                                   // the break ends
+    await session(page);
+    await expect(page.locator("#msg")).toContainText("Daily goal reached! Pip is so proud of you.");
+    await expect(page.locator("#goalText")).toHaveText("Today's goal done: 2 of 2 sessions");
+    await page.locator(".week-day.today").click();
+    await expect(page.locator("#weekTip")).toContainText("30m, goal met");
+  });
+
+  test("the goal can be changed or turned off", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await page.locator("#goalChips").getByRole("radio", { name: "4 a day" }).check();
+    await expect(page.locator("#goalText")).toHaveText("Today: 0 of 4 sessions");
+    await page.locator("#goalChips").getByRole("radio", { name: "Off" }).check();
+    await expect(page.locator("#goalLine")).toBeHidden();
+    await page.reload();
+    await expect(page.locator("#goalLine")).toBeHidden();
+  });
+
+  test("a saved rest day keeps a streak alive over a missed day", async ({ page }) => {
+    const twoDaysAgo = MORNING.getTime() - 2 * 864e5;
+    await open(page, { save: petSave({ streak: 7, bestStreak: 7, restDays: 1, lastDay: "2026-10-3", lastStudyAt: twoDaysAgo }) });
+    await expect(page.locator("#stStreak")).toHaveText("7");
+    await expect(page.locator("#stRest")).toHaveText("1 rest day saved");
+    await session(page);
+    await expect(page.locator("#msg")).toContainText("A rest day kept your 8-day streak going.");
+    await expect(page.locator("#stStreak")).toHaveText("8");
+    await expect(page.locator("#stRest")).toBeHidden();
+  });
+});
+
 test.describe("every pet is different", () => {
   const frameFor = async (browser, seed) => {
     const page = await browser.newPage();
@@ -179,6 +312,14 @@ test.describe("every pet is different", () => {
     await page.reload();
     await page.locator("#sealOpen").click();
     await expect(page.locator("#certLook")).toHaveText("A chubby pet with a belly patch, long bunny ears, a fluffy tail and a curl on top.");
+  });
+
+  test("study habits shape the pet, and the message says why", async ({ page }) => {
+    await open(page, { save: petSave({ seed: 22, sessions: 3, minutes: 180 }) });   // seed 22 alone gives pointy ears
+    await page.getByRole("radio", { name: "60 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("01:00:01");
+    await expect(page.locator("#msg")).toContainText("Pip grew into a kid and has long bunny ears, from all those long sessions!");
   });
 
   test("hatching says what kind of pet came out", async ({ page }) => {
@@ -476,6 +617,23 @@ test.describe("invites", () => {
     await expect(page.locator("#invFrom")).toHaveValue("Alex");               // from the person, by name
   });
 
+  test("the certificate says who invited them, and the album keeps it", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime(),
+      invite: { from: "Jamie", to: "Alex", welcome: "", ps: {}, letter: "", accessory: null } }) });
+    await page.locator("#sealOpen").click();
+    await expect(page.locator("#certInvited")).toHaveText("Invited to Study Pet by Jamie");
+    await page.locator("#certNewPet").click();
+    await page.locator("#newPetGo").click();
+    await page.getByRole("button", { name: "Pip's certificate" }).click();
+    await expect(page.locator("#certInvited")).toHaveText("Invited to Study Pet by Jamie");
+  });
+
+  test("a certificate without an invite doesn't mention one", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime() }) });
+    await page.locator("#sealOpen").click();
+    await expect(page.locator("#certInvited")).toBeHidden();
+  });
+
   test("a damaged link explains itself and changes nothing", async ({ page }) => {
     await open(page, { save: petSave() });
     await page.goto("./#invite=eyJ2IjoyLCJmIjoiRX");
@@ -599,6 +757,16 @@ test("keeps the screen on only while a timer runs, when the setting is on", asyn
 
 test.describe("installed app", () => {
   test.use({ serviceWorkers: "allow" });
+
+  test("offers a refresh when a new version takes over, but not on the first install", async ({ page }) => {
+    await page.goto("./");
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+    await expect(page.locator("#updateBanner")).toBeHidden();                // the first install isn't an update
+    await page.reload();                                                       // now an older version is running
+    await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new Event("controllerchange")));
+    await expect(page.locator("#updateBanner")).toBeVisible();
+    await expect(page.locator("#updateBanner")).toContainText("A new version of Study Pet is ready.");
+  });
 
   test("is installable and opens offline after the first visit", async ({ page, context, browserName }) => {
     await page.goto("./");
