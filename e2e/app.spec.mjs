@@ -218,6 +218,69 @@ test.describe("sharing a picture", () => {
   });
 });
 
+test.describe("moving to another device", () => {
+  // Read the QR code off the screen with a real QR reader, like a phone camera would.
+  async function scanMoveCode(page) {
+    await page.addScriptTag({ path: "node_modules/jsqr/dist/jsQR.js" });
+    return page.locator("#moveQR").evaluate(c => {
+      const g = c.getContext("2d"), img = g.getImageData(0, 0, c.width, c.height);
+      const r = window.jsQR(img.data, c.width, c.height);
+      return r && r.data;
+    });
+  }
+  const album = [{ earned: true, name: "Sprout", seed: 7, accessory: "hat", sessions: 21, minutes: 540, bestStreak: 5, notes: 6, totalNotes: 6,
+                   since: MORNING.getTime() - 40 * 864e5, grownAt: MORNING.getTime() - 20 * 864e5, letter: "", letterFrom: "" }];
+
+  test("scanning the code on a new device moves the pet over", async ({ page, browser }) => {
+    await open(page, { save: petSave({ name: "Mochi", seed: 44, album, days: { "2026-10-5": 45 } }) });
+    await page.locator("#moveBtn").click();
+    await expect(page.locator("#moveQR")).toBeVisible();
+    const link = await scanMoveCode(page);
+    expect(link).toMatch(/^http:\/\/localhost:\d+\/#move=[\w-]+$/);
+
+    const other = await (await browser.newContext()).newPage();   // a different device: nothing saved yet
+    await other.clock.install({ time: MORNING });
+    await other.goto(link);
+    await expect(other.locator("#moveAskTitle")).toHaveText("Move Mochi here?");
+    await expect(other.locator("#moveAskText")).toHaveText("Mochi has 9 sessions, with 1 more in the album, raised by Alex.");
+    await expect(other.locator("#nameDlg")).toBeHidden();                  // no name prompt over it
+    expect(other.url()).not.toContain("#move");                             // the link is gone from the address bar
+    await other.locator("#moveAccept").click();
+    await expect(other.locator("#msg")).toHaveText("Mochi moved over with all your progress. Welcome back, Alex!");
+    await expect(other.locator("#petName")).toHaveText("Mochi");
+    await expect(other.locator("#album li")).toContainText("Sprout");
+    await expect(other.locator("#weekTotal")).toHaveText("45m");
+    await expect(other.locator("#nameDlg")).toBeHidden();
+    await other.reload();
+    await expect(other.locator("#petName")).toHaveText("Mochi");
+  });
+
+  test("a device that already has a pet warns before replacing it", async ({ page }) => {
+    await open(page, { save: petSave({ name: "Mochi" }) });
+    await page.locator("#moveBtn").click();
+    const link = await scanMoveCode(page);
+    await page.evaluate(k => { const s = JSON.parse(localStorage.getItem(k)); s.name = "Bean"; localStorage.setItem(k, JSON.stringify(s)); }, KEY);
+    await page.reload();
+    await page.goto(link);
+    await expect(page.locator("#moveAskText")).toContainText("This replaces Bean on this device.");
+    await page.locator("#moveAskDlg [data-close]").click();
+    await expect(page.locator("#petName")).toHaveText("Bean");             // cancelling changes nothing
+  });
+
+  test("a move link can be pasted, and a damaged one changes nothing", async ({ page }) => {
+    await open(page, { save: petSave({ name: "Mochi" }) });
+    await page.locator("#moveBtn").click();
+    const link = await scanMoveCode(page);
+    await page.locator("#moveDlg [data-close]").click();
+    await page.goto("./#move=zAAAA");
+    await expect(page.locator("#msg")).toContainText("This move link looks incomplete");
+    await page.locator("#invPasteOpen").click();
+    await page.locator("#invPasteInput").fill(link);
+    await page.locator("#invPasteGo").click();
+    await expect(page.locator("#moveAskTitle")).toHaveText("Move Mochi here?");
+  });
+});
+
 test.describe("the album", () => {
   const grown = (extra = {}) => petSave({ name: "Mochi", seed: 11, sessions: 20, minutes: 500, bestStreak: 6,
     firstStudyAt: MORNING.getTime() - 20 * 864e5, grownAt: MORNING.getTime() - 864e5, ...extra });
@@ -397,7 +460,7 @@ test.describe("invites", () => {
     await page.locator("#invPasteOpen").click();
     await page.locator("#invPasteInput").fill("hello");
     await page.locator("#invPasteGo").click();
-    await expect(page.locator("#invPasteStatus")).toContainText("isn't an invite link");
+    await expect(page.locator("#invPasteStatus")).toContainText("isn't a Study Pet invite or move link");
     await page.locator("#invPasteInput").fill(`Check this out: ${link}`);
     await page.locator("#invPasteGo").click();
     await page.locator("#invAccept").click();

@@ -85,7 +85,7 @@
       <button class="secondary seal-next" id="sealNewPet" hidden>Raise a new pet</button>
       <div class="notes-links">
         <button class="link" id="invOpen">Invite a friend</button>
-        <button class="link" id="invPasteOpen">Paste an invite link</button>
+        <button class="link" id="invPasteOpen">Paste a link</button>
       </div>
     </section>
 
@@ -102,6 +102,7 @@
       <div class="backup-row">
         <button class="secondary" id="backupBtn">Back up progress</button>
         <button class="secondary" id="restoreBtn">Restore</button>
+        <button class="secondary" id="moveBtn">Move to another device</button>
       </div>
       <p class="hint" id="backupHint"></p>
       <button class="secondary" id="installBtn" hidden>Install app</button>
@@ -218,9 +219,9 @@
 </dialog>
 
 <dialog id="invPasteDlg" aria-labelledby="invPasteTitle">
-  <h2 id="invPasteTitle">Paste an invite link</h2>
-  <p>If an invite opened somewhere else (on iPhone, links open in Safari, not the Home Screen app), paste it here.</p>
-  <input id="invPasteInput" autocomplete="off" aria-label="Invite link">
+  <h2 id="invPasteTitle">Paste a link</h2>
+  <p>If an invite or move link opened somewhere else (on iPhone, links open in Safari, not the Home Screen app), paste it here.</p>
+  <input id="invPasteInput" autocomplete="off" aria-label="Invite or move link">
   <div class="row">
     <button class="primary" id="invPasteGo">Use link</button>
     <button class="link" data-close>Cancel</button>
@@ -246,6 +247,27 @@
     <button class="link" data-close>Close</button>
   </div>
   <p class="msg-line" id="cardStatus" aria-live="polite"></p>
+</dialog>
+
+<dialog id="moveDlg" aria-labelledby="moveTitle">
+  <h2 id="moveTitle">Move to another device</h2>
+  <p id="moveLead">Scan this with the other device's camera to open Study Pet there with your pet.</p>
+  <canvas class="move-qr" id="moveQR" aria-label="QR code with a link that moves your pet"></canvas>
+  <p class="hint">The link holds your whole pet, so only open it on your own devices. On iPhone, to move between Safari and the Home Screen app, copy the link and use "Paste a link" there.</p>
+  <div class="row">
+    <button class="secondary" id="moveCopy">Copy link</button>
+    <button class="link" data-close>Close</button>
+  </div>
+  <p class="msg-line" id="moveStatus" aria-live="polite"></p>
+</dialog>
+
+<dialog id="moveAskDlg" aria-labelledby="moveAskTitle">
+  <h2 id="moveAskTitle">Move a pet here?</h2>
+  <p id="moveAskText"></p>
+  <div class="row">
+    <button class="primary" id="moveAccept">Move it here</button>
+    <button class="link" data-close>Cancel</button>
+  </div>
 </dialog>
 
 <dialog id="newPetDlg" aria-labelledby="newPetTitle">
