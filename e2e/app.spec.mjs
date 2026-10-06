@@ -224,6 +224,14 @@ test.describe("every pet is different", () => {
     await expect(page.locator("#certLook")).toHaveText("A chubby pet with a belly patch, long bunny ears, a fluffy tail and a curl on top.");
   });
 
+  test("study habits shape the pet, and the message says why", async ({ page }) => {
+    await open(page, { save: petSave({ seed: 22, sessions: 3, minutes: 180 }) });   // seed 22 alone gives pointy ears
+    await page.getByRole("radio", { name: "60 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("01:00:01");
+    await expect(page.locator("#msg")).toContainText("Pip grew into a kid and has long bunny ears, from all those long sessions!");
+  });
+
   test("hatching says what kind of pet came out", async ({ page }) => {
     await open(page, { save: petSave({ seed: 22, sessions: 0, minutes: 0 }) });
     await page.getByRole("radio", { name: "15 min" }).check();

@@ -43,6 +43,7 @@ export function createState(now, random = Math.random) {
     version: SAVE_VERSION,
     name: "", sessions: 0, minutes: 0,
     seed: newSeed(random),          // decides how this pet looks as it grows (see Looks)
+    traits: {},                     // traits earned by study habits, locked in as the pet grows
     hearts: 3, heartsAt: now,
     streak: 0, lastDay: null, lastStudyAt: null, restDays: 0,
     bestStreak: 0, firstStudyAt: null, grownAt: null,   // for the certificate
@@ -65,6 +66,7 @@ export function migrate(raw, now) {
   const s = Object.assign(createState(now), raw);
   s.notes = raw.notes && typeof raw.notes === "object" ? raw.notes : {};
   if (!Number.isInteger(s.seed) || s.seed < 0) s.seed = newSeed();   // older pets get their own look once
+  s.traits = cleanTraits(raw.traits);
   s.invite = cleanInvite(raw.invite);
   s.album = Array.isArray(raw.album) ? raw.album.map(cleanAlbumEntry).filter(Boolean).slice(-200) : [];
   // Saves from before the certificate: the best streak is at least the current one,
@@ -153,7 +155,25 @@ export function petLook(s) {
   const r = seeded(s.seed);
   const look = {};
   for (const [trait, options] of Object.entries(TRAITS)) look[trait] = options[Math.floor(r() * options.length)];
-  return look;
+  return Object.assign(look, cleanTraits(s.traits));   // habits override the seed
+}
+function cleanTraits(raw) {
+  const out = {};
+  if (raw && typeof raw === "object") for (const [k, v] of Object.entries(raw)) if (TRAITS[k] && TRAITS[k].includes(v)) out[k] = v;
+  return out;
+}
+
+// How the person studies can decide a trait when the pet reaches its stage:
+// the result is locked in then, so later habits don't change it.
+export const STAGE_TRAIT = { 2: "ears", 3: "tail", 4: "topper" };
+export function habitTrait(s, trait) {
+  const avg = s.sessions ? s.minutes / s.sessions : 0;
+  if (trait === "ears" && avg >= 40) return { value: "bunny", reason: "from all those long sessions" };
+  if (trait === "ears" && s.sessions && avg <= 15) return { value: "antennae", reason: "from all those quick sessions" };
+  if (trait === "tail" && s.bestStreak >= 5) return { value: "fluffy", reason: `from studying ${s.bestStreak} days in a row` };
+  if (trait === "topper" && s.bestStreak >= 7) return { value: "star", reason: `for that ${s.bestStreak}-day streak` };
+  if (trait === "topper" && s.minutes >= 600) return { value: "leaves", reason: "from 10 hours of focus" };
+  return null;
 }
 
 // Words for the growth messages and the certificate.
@@ -233,8 +253,13 @@ export function completeFocus(s, notesList) {
   s.onBreak = { minutes: breakMinutes, endAt: t + breakMinutes * (a.unitMs || 60000) };
   const after = stageIndex(s);
   if (after === STAGES.length - 1 && !s.grownAt) s.grownAt = t;
+  let growReason = "";
+  for (let st = before + 1; st <= after; st++) {
+    const trait = STAGE_TRAIT[st], habit = trait && !s.traits[trait] ? habitTrait(s, trait) : null;
+    if (habit) { s.traits[trait] = habit.value; growReason = habit.reason; }
+  }
   const goal = s.settings.goal, goalMet = goal > 0 && s.daySessions[today] === goal;
-  return { grewTo: after > before ? after : null, notes: unlockNotes(s, t, notesList), breakMinutes, goalMet, restUsed, restEarned };
+  return { grewTo: after > before ? after : null, growReason, notes: unlockNotes(s, t, notesList), breakMinutes, goalMet, restUsed, restEarned };
 }
 
 // Called many times a second. Returns an event when a timer runs out, else null.
@@ -295,7 +320,7 @@ export function certificate(s, notesList) {
   const goal = STAGES[STAGES.length - 1].at;
   return {
     earned: !!s.grownAt, goal, progress: Math.min(s.sessions, goal),
-    name: s.name, seed: s.seed, accessory: accessory(s),
+    name: s.name, seed: s.seed, traits: { ...s.traits }, accessory: accessory(s),
     sessions: s.sessions, minutes: s.minutes, bestStreak: s.bestStreak,
     notes: notesList.filter(n => s.notes[n.id]).length, totalNotes: notesList.length,
     since: s.firstStudyAt, grownAt: s.grownAt,
@@ -312,7 +337,7 @@ function cleanAlbumEntry(e) {
   if (!e || typeof e !== "object" || typeof e.name !== "string" || !Number.isInteger(e.seed)
       || ![e.sessions, e.minutes, e.bestStreak, e.notes, e.totalNotes, e.grownAt].every(isNum)) return null;
   const text = v => (typeof v === "string" ? v : "");
-  return { earned: true, name: e.name.slice(0, 16), seed: e.seed >>> 0, accessory: ACCESSORIES.includes(e.accessory) ? e.accessory : null,
+  return { earned: true, name: e.name.slice(0, 16), seed: e.seed >>> 0, traits: cleanTraits(e.traits), accessory: ACCESSORIES.includes(e.accessory) ? e.accessory : null,
     sessions: e.sessions, minutes: e.minutes, bestStreak: e.bestStreak, notes: e.notes, totalNotes: e.totalNotes,
     since: isNum(e.since) ? e.since : null, grownAt: e.grownAt, letter: text(e.letter).slice(0, 400), letterFrom: text(e.letterFrom).slice(0, 24) };
 }
@@ -322,7 +347,7 @@ export function startNewPet(s, petName, now, notesList, random = Math.random) {
   delete c.goal; delete c.progress;
   s.album.push(c);
   Object.assign(s, {
-    name: petName, seed: newSeed(random), sessions: 0, minutes: 0, hearts: 3, heartsAt: now,
+    name: petName, seed: newSeed(random), traits: {}, sessions: 0, minutes: 0, hearts: 3, heartsAt: now,
     notes: {}, bestStreak: s.streak, firstStudyAt: null, grownAt: null, certSeen: false, active: null, onBreak: null
   });
   // The inviter's P.S. lines and sealed message were for the first pet; they stay on its certificate.

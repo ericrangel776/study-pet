@@ -473,6 +473,49 @@ test("without rest days a missed day still ends the streak", () => {
   assert.equal(s.streak, 1);
 });
 
+test("long sessions grow bunny ears, and quick ones antennae, whatever the seed", () => {
+  for (const [minutes, ears] of [[60, "bunny"], [15, "antennae"]]) {
+    for (const seed of [1, 2, 3, 4, 5]) {
+      const s = E.createState(at(2026, 10, 1)); s.seed = seed;
+      for (let i = 0; i < 4; i++) finishSession(s, at(2026, 10, 1, 8 + i * 2), minutes);
+      assert.equal(E.petLook(s).ears, ears, `${minutes}-minute sessions, seed ${seed}`);
+    }
+  }
+});
+
+test("habits are locked in when the stage arrives, and explained", () => {
+  const s = E.createState(at(2026, 10, 1)); s.seed = 3;
+  let ev;
+  for (let i = 0; i < 4; i++) ev = finishSession(s, at(2026, 10, 1, 8 + i * 2), 60);
+  assert.equal(ev.grewTo, 2);
+  assert.equal(ev.growReason, "from all those long sessions");
+  for (let i = 0; i < 6; i++) finishSession(s, at(2026, 10, 2, 8 + i), 15);   // later habits change...
+  assert.equal(E.petLook(s).ears, "bunny");                                   // ...nothing already grown
+});
+
+test("a long streak earns a fluffy tail and a star", () => {
+  const s = E.createState(at(2026, 10, 1)); s.seed = 3;
+  let tail, top;
+  for (let i = 0; i < 20; i++) {
+    const ev = finishSession(s, at(2026, 10, 1 + Math.floor(i / 2), 9 + (i % 2)), 25);
+    if (ev.grewTo === 3) tail = ev.growReason;
+    if (ev.grewTo === 4) top = ev.growReason;
+  }
+  assert.equal(E.petLook(s).tail, "fluffy");
+  assert.equal(tail, "from studying 5 days in a row");
+  assert.equal(E.petLook(s).topper, "star");
+  assert.equal(top, "for that 10-day streak");
+});
+
+test("the album keeps a pet's earned traits, and a new pet starts without them", () => {
+  const s = E.createState(at(2026, 10, 1)); s.seed = 3; s.name = "Mochi";
+  for (let i = 0; i < 20; i++) finishSession(s, at(2026, 10, 1 + Math.floor(i / 2), 9 + (i % 2)), 45);
+  const look = E.petLook(s);
+  E.startNewPet(s, "Bean", at(2026, 10, 12), NOTES);
+  assert.deepEqual(E.petLook(s.album[0]), look);
+  assert.deepEqual(s.traits, {});
+});
+
 test("days ago counts calendar days, not 24-hour periods", () => {
   assert.equal(E.daysAgo(at(2026, 10, 5, 9), at(2026, 10, 5, 22)), 0);
   assert.equal(E.daysAgo(at(2026, 10, 4, 23), at(2026, 10, 5, 9)), 1);

@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { NOTES, LENGTHS, DOG_NAMES } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, newFeature, describeLook, startNewPet, lifetime } from "./engine.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, STAGE_TRAIT, newFeature, describeLook, startNewPet, lifetime } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { drawCard } from "./card.js";
@@ -65,7 +65,8 @@ function handleEvent(ev) {
     const isNew = ev.grewTo ? newFeature(petLook(state), ev.grewTo, isPuppy(state, DOG_NAMES)) : "";   // each stage shows off something new
     if (ev.grewTo === 1) { hatchAt = Date.now(); text = `${nameOr()} hatched! It's ${isNew}.`; }
     else if (ev.grewTo) {
-      growAt = Date.now(); text = `${nameOr()} grew into a ${STAGES[ev.grewTo].name}${isNew ? ` and has ${isNew}` : ""}!`;
+      const why = ev.growReason && !(isPuppy(state, DOG_NAMES) && STAGE_TRAIT[ev.grewTo] === "ears") ? `, ${ev.growReason}` : "";   // puppies keep floppy ears
+      growAt = Date.now(); text = `${nameOr()} grew into a ${STAGES[ev.grewTo].name}${isNew ? ` and has ${isNew}${why}` : ""}!`;
       if (ev.grewTo === STAGES.length - 1) text += " Your certificate is unsealed. Find it under Notes.";
     }
     else text = `Session done. ${nameOr()} had a snack.`;
@@ -191,7 +192,7 @@ const shortDate = t => new Date(t).toLocaleDateString(undefined, { month: "short
 
 // The grown pet from a certificate (or album entry), standing still, on any canvas.
 function drawPortrait(canvas, c) {
-  const pet = { name: c.name, seed: c.seed };
+  const pet = { name: c.name, seed: c.seed, traits: c.traits };
   draw(canvas.getContext("2d"), { now: 1300, mood: "happy", stage: STAGES.length - 1, hearts: 0, unread: 0,
     hatchAt: -1e12, growAt: -1e12, patAt: -1e12, rm: true, portrait: true,
     dog: isPuppy(pet, DOG_NAMES), accessory: c.accessory, look: petLook(pet) });
@@ -216,7 +217,7 @@ function openCertificate(c) {
   $("certMsg").textContent = c.letter ? `“${c.letter}”\nFrom ${c.letterFrom}` : "";
   $("certMsg").hidden = !c.letter;
   drawPortrait($("certPet"), c);
-  $("certLook").textContent = describeLook(petLook({ seed: c.seed }), puppy);
+  $("certLook").textContent = describeLook(petLook({ seed: c.seed, traits: c.traits }), puppy);
   const current = c.seed === state.seed && !state.album.includes(c);
   $("certNewPet").hidden = !current;                 // only the current pet can move into the album
   if (current) { state.certSeen = true; save(); }
