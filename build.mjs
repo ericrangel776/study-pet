@@ -15,7 +15,7 @@ import { createHash } from "node:crypto";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 
-const ORDER = ["config", "engine", "storage", "render", "alerts", "pwa", "ui"];
+const ORDER = ["config", "engine", "storage", "render", "card", "alerts", "pwa", "ui"];
 
 let js = ORDER.map(name => {
   let src = readFileSync(`src/${name}.js`, "utf8");

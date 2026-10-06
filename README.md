@@ -11,6 +11,7 @@ src/
   engine.js    Pet rules: hearts, stages, streaks, breaks, notes, backups. No screen code.
   storage.js   Saving and loading behind a load()/save() interface
   render.js    Draws the LCD screen on a canvas
+  card.js      Draws the shareable 1080x1350 picture of the pet
   alerts.js    Chime, desktop notifications, flashing tab title
   pwa.js       Service worker registration and the install button
   ui.js        Connects everything to the page

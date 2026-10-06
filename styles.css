@@ -234,3 +234,8 @@ dialog details.ps-block textarea{min-height:64px}
 .album li span{font-size:14px;color:var(--muted)}
 .album li .link{align-self:flex-start;font-size:14px}
 #certDlg .row [hidden]{display:none}
+
+/* Shareable picture */
+.share-pet{margin:-8px 0 16px;font-size:15px}
+.card-preview{display:block;width:100%;aspect-ratio:1080/1350;border-radius:14px;border:1px solid var(--line);margin:0 0 16px;background:#EEEAF8}
+#cardDlg .row [hidden]{display:none}

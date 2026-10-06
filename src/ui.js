@@ -4,6 +4,7 @@ import { NOTES, LENGTHS, DOG_NAMES } from "./config.js";
 import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, newFeature, describeLook, startNewPet, lifetime } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
+import { drawCard } from "./card.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing, wakeLockSupported, keepAwake } from "./alerts.js";
 import { registerServiceWorker, watchInstall, promptInstall, isIOS, isInstalled } from "./pwa.js";
 
@@ -138,6 +139,7 @@ function render() {
   document.querySelectorAll("#chips input").forEach(i => { i.disabled = !!state.active; i.checked = +i.value === state.length; });
 
   $("petName").textContent = nameOr();
+  $("cardOpen").textContent = `Share a picture of ${nameOr()}`;
   const inv = state.invite;
   $("dedication").textContent = inv ? (inv.to ? `For ${inv.to}, from ${inv.from}` : `Invited by ${inv.from}`) : "";
   $("dedication").hidden = !inv;
@@ -215,6 +217,41 @@ function openCertificate(c) {
 }
 $("sealOpen").addEventListener("click", () => openCertificate(certificate(state, NOTES)));
 $("certPrint").addEventListener("click", () => window.print());
+
+/* ---------- Shareable picture ---------- */
+let cardBlob = null;
+const cardFile = () => `study-pet-${(state.name || "pet").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`;
+async function openCard() {
+  const now = Date.now(), st = stageIndex(state);
+  $("cardTitle").textContent = `Share a picture of ${nameOr()}`;
+  $("cardStatus").textContent = "";
+  $("cardImg").alt = `${nameOr()}, ${STAGES[st].name}, with ${state.sessions} sessions`;
+  show($("cardDlg"));
+  const canvas = await drawCard(document.createElement("canvas"), {
+    petName: nameOr(), userName: state.userName || "you", stageName: st === 0 ? "Still an egg" : `A ${STAGES[st].name}`,
+    sessions: state.sessions, focus: fmtMinutes(state.minutes), streak: streakNow(state, now),
+    url: (location.host + location.pathname).replace(/\/$/, ""),
+    pet: { now: 1300, mood: st === 0 ? "egg" : "happy", stage: st, hearts: 0, unread: 0, hatchAt: -1e12, growAt: -1e12, patAt: -1e12,
+           rm: true, portrait: true, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state) }
+  });
+  render();   // the renderer was just pointed at the card's canvas; redraw the screen
+  cardBlob = await new Promise(r => canvas.toBlob(r, "image/png"));
+  $("cardImg").src = URL.createObjectURL(cardBlob);
+  const file = new File([cardBlob], cardFile(), { type: "image/png" });
+  $("cardShare").hidden = !(navigator.canShare && navigator.canShare({ files: [file] }));
+}
+$("cardOpen").addEventListener("click", openCard);
+$("cardShare").addEventListener("click", () => {
+  const file = new File([cardBlob], cardFile(), { type: "image/png" });
+  navigator.share({ files: [file], title: `${nameOr()} on Study Pet`, text: `Studying with ${nameOr()} on Study Pet.` })
+    .catch(() => {});   // closing the share sheet isn't an error
+});
+$("cardSave").addEventListener("click", () => {
+  const a = document.createElement("a");
+  a.href = URL.createObjectURL(cardBlob); a.download = cardFile();
+  document.body.appendChild(a); a.click(); a.remove();
+  $("cardStatus").textContent = "Saved. Look for it in your downloads.";
+});
 
 /* ---------- Album ---------- */
 // A new egg: the grown pet moves into the album, keeping its certificate.
