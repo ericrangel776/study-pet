@@ -36,6 +36,41 @@ test("a first visit asks for the pet's name", async ({ page }) => {
   await expect(page.locator("#small")).toHaveText("Study once to hatch");
 });
 
+test("the buttons stay put while the screen's labels change", async ({ page }) => {
+  await open(page, { save: petSave() });
+  // Positions within the device, so scrolling the page doesn't count as moving.
+  const spots = () => page.locator(".key .dot").evaluateAll(ds => ds.map(d => {
+    const r = d.getBoundingClientRect(), dev = document.querySelector(".device").getBoundingClientRect();
+    return [Math.round(r.x - dev.x), Math.round(r.y - dev.y), Math.round(r.width)];
+  }));
+  const names = () => page.locator(".key").evaluateAll(ks => ks.map(k => k.getAttribute("aria-label")));
+  const start = await spots();
+  expect(await names()).toEqual(["Focus", "Length", "Pat"]);
+
+  await page.getByRole("radio", { name: "15 min" }).check();
+  await page.getByRole("button", { name: "Focus" }).click();
+  await expect.poll(names).toEqual(["Stop", "Pause", "Pat"]);
+  expect(await spots()).toEqual(start);
+  await page.getByRole("button", { name: "Pause" }).click();
+  await expect.poll(names).toEqual(["Stop", "Resume", "Pat"]);
+  expect(await spots()).toEqual(start);
+  await page.getByRole("button", { name: "Resume" }).click();
+  await page.clock.fastForward("15:01");
+  await expect.poll(names).toEqual(["Next", "Length", "Catch"]);
+  expect(await spots()).toEqual(start);
+});
+
+test("the faceplate icons light up with the pet's state", async ({ page }) => {
+  await open(page, { save: petSave() });
+  const lit = () => page.locator(".icons li.on").evaluateAll(els => els.map(e => e.dataset.icon));
+  expect(await lit()).toEqual(["love", "note"]);                             // a happy pet with unread notes
+  await page.getByRole("radio", { name: "15 min" }).check();
+  await page.locator("#keyFocus").click();
+  await expect.poll(lit).toEqual(["study", "note"]);
+  await page.clock.fastForward("15:01");
+  await expect.poll(lit).toEqual(["play", "note"]);                         // a break
+});
+
 test("the page carries its dedication", async ({ page }) => {
   await open(page, { save: petSave() });
   await expect(page.locator("footer")).toHaveText("Dedicated to Haylee :)");
