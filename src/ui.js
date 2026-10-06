@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { NOTES, LENGTHS, DOG_NAMES } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, newFeature, describeLook, startNewPet, lifetime } from "./engine.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, newFeature, describeLook, startNewPet, lifetime } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { drawCard } from "./card.js";
@@ -70,6 +70,9 @@ function handleEvent(ev) {
     }
     else text = `Session done. ${nameOr()} had a snack.`;
     if (ev.notes.length) text += ` You unlocked ${ev.notes.length === 1 ? "a note" : ev.notes.length + " notes"}.`;
+    if (ev.goalMet) { text += ` Daily goal reached! ${nameOr()} is so proud of you.`; if (!ev.grewTo) growAt = Date.now(); }
+    if (ev.restUsed) text += ` A rest day kept your ${state.streak}-day streak going.`;
+    if (ev.restEarned) text += ` ${REST_EVERY} days in a row earned you a rest day for a day you miss.`;
     if (!ev.breakSkipped) text += ` Enjoy a ${ev.breakMinutes}-minute break.`;
     say(text);
     alertUser("Session complete!", text, [660, 880, 1320]);
@@ -146,6 +149,9 @@ function render() {
   $("dedication").textContent = inv ? (inv.to ? `For ${inv.to}, from ${inv.from}` : `Invited by ${inv.from}`) : "";
   $("dedication").hidden = !inv;
   $("stStreak").textContent = streakNow(state, now);
+  $("stRest").textContent = state.restDays ? `${state.restDays} rest ${state.restDays === 1 ? "day" : "days"} saved` : "";
+  $("stRest").hidden = !state.restDays;
+  renderGoal(now);
   const total = lifetime(state);   // across every pet raised
   $("stSessions").textContent = total.sessions;
   $("stTime").textContent = fmtMinutes(total.minutes);
@@ -323,7 +329,7 @@ let weekSig = "";
 const BAR_MAX = 64;   // px; the column leaves room above for the cap label
 function renderWeek(now) {
   const week = lastWeek(state, now);
-  const sig = dayKey(now) + JSON.stringify(week.map(d => d.minutes));
+  const sig = dayKey(now) + JSON.stringify(week.map(d => [d.minutes, d.sessions])) + state.settings.goal;
   if (sig === weekSig) return;
   weekSig = sig;
 
@@ -340,7 +346,7 @@ function renderWeek(now) {
 
     const day = document.createElement("div");
     day.className = "week-day" + (today ? " today" : "");
-    day.dataset.tip = `${long}: ${d.minutes ? fmtMinutes(d.minutes) : "no focus time"}`;
+    day.dataset.tip = `${long}: ${d.minutes ? fmtMinutes(d.minutes) : "no focus time"}${state.settings.goal && d.sessions >= state.settings.goal ? ", goal met" : ""}`;
     const col = document.createElement("div");
     col.className = "week-col";
     if (d.minutes) {
@@ -465,12 +471,39 @@ LENGTHS.forEach(n => {
   $("chips").appendChild(label);
 });
 
+/* ---------- Daily goal ---------- */
+function renderGoal(now) {
+  const g = goalToday(state, now);
+  $("goalLine").hidden = !g.goal;
+  if (!g.goal) return;
+  const dots = $("goalDots");
+  if (dots.childElementCount !== Math.max(g.goal, g.done) || dots.dataset.done !== String(g.done)) {
+    dots.innerHTML = "";
+    for (let i = 0; i < Math.max(g.goal, g.done); i++) {
+      const dot = document.createElement("span");
+      dot.className = i < g.done ? "on" : "";
+      dots.appendChild(dot);
+    }
+    dots.dataset.done = g.done;
+  }
+  $("goalText").textContent = g.met ? `Today's goal done: ${g.done} of ${g.goal} sessions` : `Today: ${g.done} of ${g.goal} sessions`;
+}
+GOALS.forEach(n => {
+  const label = document.createElement("label"), input = document.createElement("input"), span = document.createElement("span");
+  input.type = "radio"; input.name = "goal"; input.value = n;
+  span.textContent = n ? `${n} a day` : "Off";
+  label.append(input, span);
+  input.addEventListener("change", () => { state.settings.goal = n; save(); render(); });
+  $("goalChips").appendChild(label);
+});
+
 /* ---------- Settings ---------- */
 // Match the checkboxes to the current state, after loading, restoring, resetting or switching test mode.
 function syncSettings() {
   $("soundToggle").checked = state.settings.sound;
   if (notifySupported()) $("notifyToggle").checked = state.settings.notify && Notification.permission === "granted";
   $("awakeToggle").checked = state.settings.awake;
+  document.querySelectorAll('#goalChips input').forEach(i => { i.checked = +i.value === state.settings.goal; });
 }
 syncSettings();
 $("soundToggle").addEventListener("change", e => {

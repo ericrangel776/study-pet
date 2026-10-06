@@ -244,3 +244,14 @@ dialog details.ps-block textarea{min-height:64px}
 .move-qr{display:block;width:min(280px,100%);margin:0 auto 14px;image-rendering:pixelated;image-rendering:crisp-edges;border-radius:12px}
 #moveDlg .hint{margin:0 0 14px}
 .move-qr[hidden]{display:none}
+
+/* Daily goal and rest days */
+.goal{display:flex;align-items:center;gap:10px;margin:0 0 16px;font-weight:500}
+.goal[hidden]{display:none}
+.goal-dots{display:flex;gap:5px}
+.goal-dots span{width:14px;height:14px;border-radius:50%;border:2px solid var(--bar)}
+.goal-dots span.on{background:var(--bar)}
+.tile-note{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.tile-note[hidden]{display:none}
+.goal-pick{margin:4px 0 14px}
+.goal-pick legend{font-size:15px}

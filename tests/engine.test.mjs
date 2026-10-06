@@ -428,6 +428,51 @@ test("the album survives saving and backups, and bad entries are dropped", () =>
   assert.equal(messy.album.length, 1);
 });
 
+test("the daily goal counts today's sessions and says when it's reached", () => {
+  const s = E.createState(at(2026, 10, 5, 8));
+  assert.deepEqual(E.goalToday(s, at(2026, 10, 5, 9)), { goal: 2, done: 0, met: false });
+  let ev = finishSession(s, at(2026, 10, 5, 10));
+  assert.equal(ev.goalMet, false);
+  ev = finishSession(s, at(2026, 10, 5, 11));
+  assert.equal(ev.goalMet, true);                          // reached with this session
+  ev = finishSession(s, at(2026, 10, 5, 12));
+  assert.equal(ev.goalMet, false);                         // only celebrated once
+  assert.deepEqual(E.goalToday(s, at(2026, 10, 5, 13)), { goal: 2, done: 3, met: true });
+  assert.equal(E.goalToday(s, at(2026, 10, 6, 9)).done, 0);  // a new day starts at zero
+  s.settings.goal = 0;
+  assert.equal(E.goalToday(s, at(2026, 10, 5, 13)).met, false);
+});
+
+test("every 7 days in a row earns a rest day, up to 2", () => {
+  const s = E.createState(at(2026, 10, 1));
+  let earned = [];
+  for (let d = 1; d <= 21; d++) earned.push(finishSession(s, at(2026, 10, d, 10)).restEarned);
+  assert.deepEqual(earned.map((e, i) => (e ? i + 1 : 0)).filter(Boolean), [7, 14]);   // the 21st day would be a 3rd
+  assert.equal(s.restDays, 2);
+});
+
+test("a rest day covers a missed day and keeps the streak going", () => {
+  const s = E.createState(at(2026, 10, 1));
+  for (let d = 1; d <= 7; d++) finishSession(s, at(2026, 10, d, 10));
+  assert.equal(s.restDays, 1);
+  assert.equal(E.streakNow(s, at(2026, 10, 9, 10)), 7);   // missed Oct 8, but a rest day is saved
+  const ev = finishSession(s, at(2026, 10, 9, 10));
+  assert.equal(ev.restUsed, 1);
+  assert.equal(s.streak, 8);
+  assert.equal(s.restDays, 0);
+  finishSession(s, at(2026, 10, 12, 10));                 // missed two more with none saved
+  assert.equal(s.streak, 1);
+});
+
+test("without rest days a missed day still ends the streak", () => {
+  const s = E.createState(at(2026, 10, 1));
+  finishSession(s, at(2026, 10, 1, 10));
+  finishSession(s, at(2026, 10, 2, 10));
+  assert.equal(E.streakNow(s, at(2026, 10, 4, 10)), 0);
+  assert.equal(finishSession(s, at(2026, 10, 4, 10)).restUsed, 0);
+  assert.equal(s.streak, 1);
+});
+
 test("days ago counts calendar days, not 24-hour periods", () => {
   assert.equal(E.daysAgo(at(2026, 10, 5, 9), at(2026, 10, 5, 22)), 0);
   assert.equal(E.daysAgo(at(2026, 10, 4, 23), at(2026, 10, 5, 9)), 1);
