@@ -22,15 +22,21 @@
 <main>
   <div class="device-wrap">
     <div class="device">
-      <div class="bezel">
-        <div class="lcd">
-          <canvas id="screen" width="64" height="48" role="img" aria-label="Your pet"></canvas>
-          <div class="lcd-status" aria-live="polite">
-            <div class="big" id="big"></div>
-            <div class="small" id="small"></div>
+      <span class="loop" aria-hidden="true"></span>
+      <div class="faceplate">
+        <ul class="icons" id="iconsTop" aria-hidden="true"></ul>
+        <div class="bezel">
+          <div class="lcd">
+            <div class="screen-wrap"><canvas id="screen" width="64" height="48" role="img" aria-label="Your pet"></canvas></div>
+            <div class="lcd-status" aria-live="polite">
+              <div class="big" id="big"></div>
+              <div class="small" id="small"></div>
+            </div>
           </div>
         </div>
+        <ul class="icons" id="iconsBottom" aria-hidden="true"></ul>
       </div>
+      <p class="brand" aria-hidden="true">Study Pet</p>
       <div class="keys">
         <button class="key" id="keyFocus"><span class="dot"></span><span class="lbl" id="focusLbl">Focus</span></button>
         <button class="key" id="keyLength"><span class="dot"></span><span class="lbl" id="lengthLbl">Length</span></button>

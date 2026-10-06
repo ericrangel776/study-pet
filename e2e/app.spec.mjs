@@ -36,6 +36,17 @@ test("a first visit asks for the pet's name", async ({ page }) => {
   await expect(page.locator("#small")).toHaveText("Study once to hatch");
 });
 
+test("the faceplate icons light up with the pet's state", async ({ page }) => {
+  await open(page, { save: petSave() });
+  const lit = () => page.locator(".icons li.on").evaluateAll(els => els.map(e => e.dataset.icon));
+  expect(await lit()).toEqual(["love", "note"]);                             // a happy pet with unread notes
+  await page.getByRole("radio", { name: "15 min" }).check();
+  await page.locator("#keyFocus").click();
+  await expect.poll(lit).toEqual(["study", "note"]);
+  await page.clock.fastForward("15:01");
+  await expect.poll(lit).toEqual(["play", "note"]);                         // a break
+});
+
 test("the page carries its dedication", async ({ page }) => {
   await open(page, { save: petSave() });
   await expect(page.locator("footer")).toHaveText("Dedicated to Haylee :)");

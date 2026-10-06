@@ -91,6 +91,38 @@ function handleEvent(ev) {
   save();
 }
 
+/* ---------- Status icons on the faceplate ---------- */
+// Like the icon rows on a real virtual pet: each one lights up when it applies.
+// 7x7 pixel art, "#" = lit.
+const STATUS_ICONS = {
+  meal:   ["...#...", "..#....", ".##.##.", "#######", "#######", ".#####.", "..###.."],
+  study:  ["##...##", "#.#.#.#", "#..#..#", "#..#..#", "#..#..#", "##.#.##", "..###.."],
+  play:   ["..###..", ".#####.", "##.####", "#.#####", "#######", ".#####.", "..###.."],
+  sleep:  ["..###..", ".##....", "##.....", "##.....", "##.....", ".##...#", "..####."],
+  love:   [".##.##.", "#######", "#######", "#######", ".#####.", "..###..", "...#..."],
+  note:   [".......", "#######", "##...##", "#.#.#.#", "#..#..#", "#.....#", "#######"],
+  goal:   ["...#...", "...#...", "#######", ".#####.", "..###..", ".##.##.", ".#...#."],
+  trophy: ["#######", "#.###.#", "#.###.#", ".#####.", "..###..", "...#...", "..###.."]
+};
+const iconEls = {};
+[["iconsTop", ["meal", "study", "play", "sleep"]], ["iconsBottom", ["love", "note", "goal", "trophy"]]].forEach(([row, names]) => {
+  names.forEach(name => {
+    const li = document.createElement("li");
+    const rects = STATUS_ICONS[name].flatMap((r, y) => [...r].map((c, x) => (c === "#" ? `<rect x="${x}" y="${y}" width="1" height="1"/>` : ""))).join("");
+    li.innerHTML = `<svg viewBox="0 0 7 7" fill="currentColor">${rects}</svg>`;
+    li.dataset.icon = name;
+    $(row).appendChild(li);
+    iconEls[name] = li;
+  });
+});
+function renderIcons(m, unread, now) {
+  const on = {
+    meal: m === "hungry", study: m === "focus" || m === "paused", play: m === "break", sleep: m === "sleepy",
+    love: m === "happy", note: unread > 0, goal: goalToday(state, now).met, trophy: !!state.grownAt
+  };
+  for (const [name, li] of Object.entries(iconEls)) li.classList.toggle("on", on[name]);
+}
+
 /* ---------- Rendering ---------- */
 function renderNotes() {
   const sig = JSON.stringify([state.notes, state.invite, state.name]);
@@ -177,6 +209,7 @@ function render() {
   $("resetBtn").textContent = now < resetArmed ? "Tap again to erase everything" : "Start over";
   $("testTag").hidden = !testMode;
   renderNotes();
+  renderIcons(m, unread, now);
   renderWeek(now);
   renderSeal();
   renderAlbum();
