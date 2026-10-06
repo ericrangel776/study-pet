@@ -91,20 +91,26 @@ main{max-width:940px;margin:0 auto;padding:44px 20px 56px;display:grid;
 .brand{margin:7px 0 0;font-family:"Silkscreen","Courier New",monospace;font-size:11px;letter-spacing:.32em;text-transform:uppercase;
   color:var(--shell-lo);text-shadow:0 1px 0 rgba(255,255,255,.45)}
 
-/* three domed buttons in sockets, in a gentle arc */
-.keys{display:flex;justify-content:center;align-items:flex-start;gap:9%;width:100%;margin-top:auto;padding-top:6px}
-.key{display:flex;flex-direction:column;align-items:center;gap:7px;background:none;border:0;padding:4px;cursor:pointer;border-radius:16px;color:inherit}
-.key:nth-child(2){margin-top:9px}
-.key .dot{position:relative;width:44px;height:44px;border-radius:50%;
-  background:radial-gradient(circle at 36% 30%, #FFF0C2 0 14%, var(--btn) 46%, var(--btn-lo) 100%);
-  box-shadow:0 0 0 5px rgba(30,15,80,.22),0 0 0 6px rgba(255,255,255,.22),0 5px 0 var(--btn-lo),0 8px 10px rgba(0,0,0,.25);
+/* soft keys: the bottom row of the screen says what each button does right now */
+.softkeys{display:grid;grid-template-columns:repeat(3,1fr);margin:5px -2px 0;padding-top:4px;border-top:1px dashed rgba(40,51,31,.3);
+  font-family:"Silkscreen","Courier New",monospace;font-size:11px;line-height:1;color:var(--lcd-ink);text-align:center;text-transform:uppercase}
+.softkeys span{white-space:nowrap;overflow:hidden;text-overflow:clip}
+.softkeys span.off{opacity:.3}
+
+/* three identical buttons in fixed places, lined up under the soft keys, with engraved letters */
+.keys{display:grid;grid-template-columns:repeat(3,1fr);width:100%;margin-top:auto;padding:12px 26px 0;container-type:inline-size}   /* side padding matches the screen's inset */
+.key{justify-self:center;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;padding:4px;cursor:pointer;border-radius:50%;color:inherit}
+/* full size where there's room; smaller on narrow phones so the sockets never touch */
+.key .dot{position:relative;width:min(42px, calc(100cqw / 3 - 22px));aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 38% 32%, #FFF2CC 0 10%, var(--btn) 48%, var(--btn-lo) 100%);
+  box-shadow:0 0 0 4px rgba(30,15,80,.2),0 0 0 5px rgba(255,255,255,.2),0 4px 0 var(--btn-lo),0 6px 8px rgba(0,0,0,.22);
   transition:transform .08s,box-shadow .08s}
-.key:active .dot{transform:translateY(4px);
-  box-shadow:0 0 0 5px rgba(30,15,80,.22),0 0 0 6px rgba(255,255,255,.22),0 1px 0 var(--btn-lo),0 2px 4px rgba(0,0,0,.25)}
-.key .lbl{font-size:13px;font-weight:600;color:#FFFFFF;background:rgba(42,36,64,.55);border-radius:999px;padding:1px 10px;white-space:nowrap}
+.key:active .dot{transform:translateY(3px);
+  box-shadow:0 0 0 4px rgba(30,15,80,.2),0 0 0 5px rgba(255,255,255,.2),0 1px 0 var(--btn-lo),0 2px 3px rgba(0,0,0,.22)}
+.key .engrave{font-family:"Silkscreen","Courier New",monospace;font-size:12px;line-height:1;color:rgba(30,15,80,.55);text-shadow:0 1px 0 rgba(255,255,255,.4)}
 .key:disabled{cursor:not-allowed}
-.key:disabled .dot{filter:grayscale(.7) brightness(.85)}
-.key:focus-visible{outline:3px solid #FFFFFF;outline-offset:2px}
+.key:disabled .dot{filter:grayscale(.6) brightness(.9)}
+.key:focus-visible{outline:3px solid #FFFFFF;outline-offset:3px}
 @media (prefers-reduced-motion: reduce){.icons li{transition:none}}
 
 /* Side panel */
