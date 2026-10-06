@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { NOTES, LENGTHS, DOG_NAMES } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, pauseFocus, resumeFocus, focusLeft, pauseLeft, PAUSE_MAX, THEMES, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, STAGE_TRAIT, newFeature, describeLook, startNewPet, lifetime } from "./engine.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, pauseFocus, resumeFocus, focusLeft, pauseLeft, PAUSE_MAX, THEMES, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, tryCatch, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, STAGE_TRAIT, newFeature, describeLook, startNewPet, lifetime } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS } from "./render.js";
 import { drawCard } from "./card.js";
@@ -16,7 +16,7 @@ let state = migrate(store.load(), Date.now());
 
 const canvas = $("screen"), ctx = canvas.getContext("2d");
 const RM = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
-let testMode = false, patAt = 0, hatchAt = 0, growAt = 0, stopArmed = 0, resetArmed = 0;
+let catchAt = 0, testMode = false, patAt = 0, hatchAt = 0, growAt = 0, stopArmed = 0, resetArmed = 0;
 let downloads = null, notesSig = "";
 const unitMs = () => (testMode ? 1000 : 60000);
 // Test mode plays with a copy that is never saved, so practice runs can't
@@ -32,7 +32,7 @@ function protectProgress() {
 
 const MOOD_TEXT = {
   egg: "Study once to hatch", happy: "Happy", hungry: "Hungry, time to study",
-  sleepy: "Sleepy, misses you", focus: "Studying with you", break: "Break time, play!", paused: "Paused, waiting for you"
+  sleepy: "Sleepy, misses you", focus: "Studying with you", break: "Break! Catch the ball", paused: "Paused, waiting for you"
 };
 const nameOr = () => state.name || "Your pet";
 function fmt(ms) {
@@ -128,7 +128,7 @@ function renderNotes() {
 function render() {
   const now = Date.now(), m = mood(state, now), st = stageIndex(state);
   const unread = unreadNotes(state, NOTES);
-  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, rm: RM, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state) });
+  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, catchAt, rm: RM, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state) });
   canvas.setAttribute("aria-label", `${nameOr()}, ${STAGES[st].name}, ${MOOD_TEXT[m].toLowerCase()}${unread ? ", new note waiting" : ""}`);
 
   let title = "Study Pet";
@@ -143,7 +143,9 @@ function render() {
   }
   if (!isFlashing()) document.title = title;
   $("small").textContent = now - hatchAt < HATCH_MS ? "Hatching!"
-    : m === "paused" ? `Paused, resumes in ${fmt(pauseLeft(state, now))}` : MOOD_TEXT[m];
+    : m === "paused" ? `Paused, resumes in ${fmt(pauseLeft(state, now))}`
+    : m === "break" && state.onBreak.catches ? `${state.onBreak.catches} in a row!` : MOOD_TEXT[m];
+  $("patLbl").textContent = m === "break" ? "Catch" : "Pat";
 
   $("focusLbl").textContent = state.active ? (now < stopArmed ? "Sure?" : "Stop")
                             : state.onBreak ? "Next round" : "Focus";
@@ -468,8 +470,22 @@ $("keyLength").addEventListener("click", () => {
   state.length = LENGTHS[(LENGTHS.indexOf(state.length) + 1) % LENGTHS.length] || 25;
   save(); render();
 });
+// During a break, the Pat key (or a tap on the screen) catches the ball instead.
+function catchBall() {
+  const r = tryCatch(state, Date.now(), RM);
+  if (!r) return false;
+  if (r.caught) {
+    catchAt = Date.now();
+    if (state.settings.sound) playChime([1320]);
+    if (r.newBest && r.catches > 1) say(`${r.catches} catches in a row, a new best!`);
+  } else say(r.best ? `Missed! Catch it just as it lands. Your best is ${r.best} in a row.` : "Missed! Catch the ball just as it lands.");
+  save(); render();
+  return true;
+}
+$("screen").addEventListener("pointerdown", () => { if (state.onBreak) { unlockAudio(); catchBall(); } });
 $("keyPat").addEventListener("click", () => {
   unlockAudio();
+  if (state.onBreak && catchBall()) return;
   patAt = Date.now();
   if (stageIndex(state) === 0) say("The egg wiggles. Something is in there.");
   render();
