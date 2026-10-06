@@ -30,31 +30,88 @@ main{max-width:940px;margin:0 auto;padding:44px 20px 56px;display:grid;
   grid-template-columns:minmax(0,1fr) minmax(0,340px);gap:48px;align-items:start}
 @media (max-width:760px){main{grid-template-columns:1fr;gap:32px;padding-top:36px}}
 
-/* The device */
-.device-wrap{display:flex;justify-content:center;padding-top:24px}
-@media (min-width:761px){.device-wrap{position:sticky;top:calc(env(safe-area-inset-top,0px) + 40px)}}
-.device{position:relative;isolation:isolate;width:min(370px,100%);aspect-ratio:.82;
-  background:var(--shell);border-radius:50% 50% 46% 46% / 55% 55% 45% 45%;
-  padding:17% 12% 9%;display:flex;flex-direction:column;align-items:center;
-  box-shadow:inset -12px -16px 0 var(--shell-lo),inset 10px 12px 0 var(--shell-hi),0 22px 34px rgba(30,20,70,.28)}
-.device::before{content:"";position:absolute;top:-30px;left:50%;width:46px;height:46px;
-  border:7px solid #C8C1DA;border-radius:50%;transform:translateX(-50%);z-index:-1}
-.bezel{width:100%;background:var(--bezel);border-radius:22px;padding:11px}
-.lcd{background-color:var(--lcd);border-radius:12px;padding:6px 8px 9px}
+/* The device: a glossy plastic egg with a faceplate, an LCD and three buttons */
+.device-wrap{display:flex;justify-content:center;padding:34px 0 30px}
+@media (min-width:761px){.device-wrap{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px)}}
+.device{position:relative;isolation:isolate;width:min(370px,100%);
+  border-radius:50% 50% 46% 46% / 58% 58% 42% 42%;
+  padding:12% 10% 8%;display:flex;flex-direction:column;align-items:center;
+  background:
+    radial-gradient(90% 70% at 30% 16%, rgba(255,255,255,.5), rgba(255,255,255,0) 42%),
+    radial-gradient(circle at 3px 4px, rgba(255,255,255,.16) .7px, transparent 1.3px) 0 0 / 13px 17px,
+    radial-gradient(circle at 9px 11px, rgba(255,255,255,.12) .6px, transparent 1.2px) 0 0 / 19px 23px,
+    linear-gradient(160deg, var(--shell-hi), var(--shell) 48%, var(--shell-lo));
+  box-shadow:
+    inset 0 -16px 26px rgba(30,15,80,.32),
+    inset 0 12px 20px rgba(255,255,255,.3),
+    inset 0 0 0 1.5px rgba(255,255,255,.12),
+    0 3px 0 var(--shell-lo),
+    0 30px 44px -14px rgba(30,20,70,.5)}
+/* a soft shadow on the "table" */
+.device::after{content:"";position:absolute;z-index:-2;left:16%;right:16%;bottom:-26px;height:24px;border-radius:50%;
+  background:radial-gradient(closest-side, rgba(30,20,70,.3), transparent);filter:blur(2px)}
+/* keychain: a nub on the shell and a metal ring */
+.loop{position:absolute;z-index:-1;top:-12px;left:50%;width:30px;height:22px;transform:translateX(-50%);border-radius:10px 10px 6px 6px;
+  background:linear-gradient(180deg, var(--shell-hi), var(--shell));box-shadow:inset 0 -3px 4px rgba(30,15,80,.25)}
+.loop::before{content:"";position:absolute;left:50%;top:-30px;width:40px;height:40px;transform:translateX(-50%);border-radius:50%;
+  border:6px solid #CFC9DD;box-shadow:inset 1px 1px 0 rgba(255,255,255,.9),inset -1px -2px 0 rgba(0,0,0,.18),1px 2px 2px rgba(0,0,0,.18)}
+
+/* the raised plate around the screen, with status icons above and below */
+.faceplate{width:100%;padding:4px 9px 5px;border-radius:38% 38% 34px 34px / 24% 24% 34px 34px;   /* the top follows the egg */
+  
+  background:linear-gradient(180deg, rgba(255,255,255,.3), rgba(255,255,255,.1));
+  box-shadow:inset 0 1px 0 rgba(255,255,255,.55),inset 0 -3px 8px rgba(30,15,80,.14),0 2px 0 rgba(255,255,255,.18)}
+.icons{display:flex;justify-content:space-around;margin:0;padding:2px 8px;list-style:none}
+.icons:first-child{padding:4px 17% 2px}   /* clear of the curved top */
+.icons li{width:17px;height:17px;color:var(--bezel);opacity:.28;transition:opacity .25s,filter .25s}
+.icons li.on{opacity:1;filter:drop-shadow(0 0 3px rgba(255,255,255,.7))}
+.icons svg{display:block;width:100%;height:100%;shape-rendering:crispEdges}
+
+.bezel{width:100%;border-radius:18px;padding:9px;margin:3px 0;
+  background:linear-gradient(180deg, #2E274F, var(--bezel) 30%, #241E40);
+  box-shadow:inset 0 3px 7px rgba(0,0,0,.55),0 1px 0 rgba(255,255,255,.4),0 -1px 0 rgba(0,0,0,.15)}
+.lcd{position:relative;overflow:hidden;border-radius:10px;padding:6px 8px 8px;
+  background:radial-gradient(ellipse at 50% 38%, #C3D0A5, var(--lcd) 55%, #A9B78A);
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.28),inset 0 4px 9px rgba(0,0,0,.22)}
+/* glass reflection over the whole LCD */
+.lcd::after{content:"";position:absolute;inset:0;pointer-events:none;border-radius:inherit;
+  background:linear-gradient(118deg, rgba(255,255,255,.32) 0%, rgba(255,255,255,.1) 26%, transparent 27%, transparent 64%, rgba(255,255,255,.07) 65%, transparent 80%)}
+/* a faint dot-matrix grid, one cell per screen pixel */
+.screen-wrap{position:relative}
+.screen-wrap::after{content:"";position:absolute;inset:0;pointer-events:none;
+  background:
+    repeating-linear-gradient(90deg, rgba(40,51,31,.05) 0 1px, transparent 1px calc(100% / 64)),
+    repeating-linear-gradient(180deg, rgba(40,51,31,.05) 0 1px, transparent 1px calc(100% / 48))}
 #screen{display:block;width:100%;aspect-ratio:64/48;image-rendering:pixelated;image-rendering:crisp-edges}
 .lcd-status{font-family:"Silkscreen","Courier New",monospace;color:var(--lcd-ink);text-align:center;line-height:1.15}
 .lcd-status .big{font-size:22px;letter-spacing:.02em;min-height:1.15em;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
 .lcd-status .small{font-size:12px;opacity:.8;min-height:1.15em}
 
-.keys{display:flex;justify-content:center;gap:9%;width:100%;margin-top:auto}
-.key{display:flex;flex-direction:column;align-items:center;gap:7px;background:none;border:0;padding:4px;cursor:pointer;border-radius:14px}
-.key .dot{width:50px;height:50px;border-radius:50%;background:var(--btn);
-  box-shadow:inset -3px -5px 0 var(--btn-lo),0 4px 0 rgba(0,0,0,.2);transition:transform .08s}
-.key:active .dot{transform:translateY(3px);box-shadow:inset -3px -5px 0 var(--btn-lo),0 1px 0 rgba(0,0,0,.2)}
-.key .lbl{font-size:14px;font-weight:500;color:#F7F4FF}
+/* engraved brand */
+.brand{margin:7px 0 0;font-family:"Silkscreen","Courier New",monospace;font-size:11px;letter-spacing:.32em;text-transform:uppercase;
+  color:var(--shell-lo);text-shadow:0 1px 0 rgba(255,255,255,.45)}
+
+/* soft keys: the bottom row of the screen says what each button does right now */
+.softkeys{display:grid;grid-template-columns:repeat(3,1fr);margin:5px -2px 0;padding-top:4px;border-top:1px dashed rgba(40,51,31,.3);
+  font-family:"Silkscreen","Courier New",monospace;font-size:11px;line-height:1;color:var(--lcd-ink);text-align:center;text-transform:uppercase}
+.softkeys span{white-space:nowrap;overflow:hidden;text-overflow:clip}
+.softkeys span.off{opacity:.3}
+
+/* three identical buttons in fixed places, lined up under the soft keys, with engraved letters */
+.keys{display:grid;grid-template-columns:repeat(3,1fr);width:100%;margin-top:auto;padding:12px 26px 0;container-type:inline-size}   /* side padding matches the screen's inset */
+.key{justify-self:center;display:flex;flex-direction:column;align-items:center;gap:6px;background:none;border:0;padding:4px;cursor:pointer;border-radius:50%;color:inherit}
+/* full size where there's room; smaller on narrow phones so the sockets never touch */
+.key .dot{position:relative;width:min(42px, calc(100cqw / 3 - 22px));aspect-ratio:1;border-radius:50%;
+  background:radial-gradient(circle at 38% 32%, #FFF2CC 0 10%, var(--btn) 48%, var(--btn-lo) 100%);
+  box-shadow:0 0 0 4px rgba(30,15,80,.2),0 0 0 5px rgba(255,255,255,.2),0 4px 0 var(--btn-lo),0 6px 8px rgba(0,0,0,.22);
+  transition:transform .08s,box-shadow .08s}
+.key:active .dot{transform:translateY(3px);
+  box-shadow:0 0 0 4px rgba(30,15,80,.2),0 0 0 5px rgba(255,255,255,.2),0 1px 0 var(--btn-lo),0 2px 3px rgba(0,0,0,.22)}
+.key .engrave{font-family:"Silkscreen","Courier New",monospace;font-size:12px;line-height:1;color:rgba(30,15,80,.55);text-shadow:0 1px 0 rgba(255,255,255,.4)}
 .key:disabled{cursor:not-allowed}
-.key:disabled .dot{filter:grayscale(.7) brightness(.85)}
-.key:focus-visible{outline:3px solid #FFFFFF;outline-offset:2px}
+.key:disabled .dot{filter:grayscale(.6) brightness(.9)}
+.key:focus-visible{outline:3px solid #FFFFFF;outline-offset:3px}
+@media (prefers-reduced-motion: reduce){.icons li{transition:none}}
 
 /* Side panel */
 .panel h1{font-size:44px;line-height:1.05;font-weight:600;margin:0 0 10px;overflow-wrap:anywhere}
