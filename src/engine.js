@@ -373,7 +373,8 @@ export function certificate(s, notesList) {
     sessions: s.sessions, minutes: s.minutes, bestStreak: s.bestStreak,
     notes: notesList.filter(n => s.notes[n.id]).length, totalNotes: notesList.length,
     since: s.firstStudyAt, grownAt: s.grownAt,
-    letter: (s.invite && s.invite.letter) || "", letterFrom: (s.invite && s.invite.from) || ""
+    letter: (s.invite && s.invite.letter) || "", letterFrom: (s.invite && s.invite.from) || "",
+    invitedBy: (s.invite && s.invite.from) || ""
   };
 }
 
@@ -388,7 +389,8 @@ function cleanAlbumEntry(e) {
   const text = v => (typeof v === "string" ? v : "");
   return { earned: true, name: e.name.slice(0, 16), seed: e.seed >>> 0, traits: cleanTraits(e.traits), accessory: ACCESSORIES.includes(e.accessory) ? e.accessory : null,
     sessions: e.sessions, minutes: e.minutes, bestStreak: e.bestStreak, notes: e.notes, totalNotes: e.totalNotes,
-    since: isNum(e.since) ? e.since : null, grownAt: e.grownAt, letter: text(e.letter).slice(0, 400), letterFrom: text(e.letterFrom).slice(0, 24) };
+    since: isNum(e.since) ? e.since : null, grownAt: e.grownAt, letter: text(e.letter).slice(0, 400), letterFrom: text(e.letterFrom).slice(0, 24),
+    invitedBy: text(e.invitedBy).slice(0, 24) };
 }
 export function startNewPet(s, petName, now, notesList, random = Math.random) {
   if (!s.grownAt) throw new Error("Only a fully grown pet can move into the album.");

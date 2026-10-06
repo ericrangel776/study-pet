@@ -4,9 +4,19 @@
 // serving old files while you edit, so it stays off there.
 const SW_ENABLED = false;
 
-export function registerServiceWorker() {
+// onUpdate runs when a new version takes over this page. Not on the very first
+// install: then there was no older version running.
+export function registerServiceWorker(onUpdate) {
   if (!SW_ENABLED || !("serviceWorker" in navigator)) return;
-  navigator.serviceWorker.register("sw.js").catch(() => {});   // e.g. opened as a file: the app still works
+  const hadOlder = !!navigator.serviceWorker.controller;
+  navigator.serviceWorker.addEventListener("controllerchange", () => { if (hadOlder && onUpdate) onUpdate(); });
+  navigator.serviceWorker.register("sw.js").then(reg => {
+    if (!reg) return;   // some browsers (and test setups) block service workers
+    // An installed app can stay open for days, so look for a new version hourly and whenever it's shown again.
+    const check = () => reg.update().catch(() => {});
+    setInterval(check, 3600e3);
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) check(); });
+  }).catch(() => {});   // e.g. opened as a file: the app still works
 }
 
 // Browsers that support installing (Chrome, Edge, Android) fire this event when

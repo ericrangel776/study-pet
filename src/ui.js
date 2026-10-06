@@ -224,6 +224,8 @@ function openCertificate(c) {
     div.append(dt, dd); $("certStats").appendChild(div);
   });
   $("certSigned").textContent = `Signed, ${pet}${puppy ? " (woof!)" : ""}`;
+  $("certInvited").textContent = c.invitedBy ? `Invited to Study Pet by ${c.invitedBy}` : "";
+  $("certInvited").hidden = !c.invitedBy;
   $("certMsg").textContent = c.letter ? `“${c.letter}”\nFrom ${c.letterFrom}` : "";
   $("certMsg").hidden = !c.letter;
   drawPortrait($("certPet"), c);
@@ -575,6 +577,7 @@ THEMES.forEach(t => {
   input.addEventListener("change", () => { state.settings.theme = t; save(); applyTheme(); });
   $("themeChips").appendChild(label);
 });
+syncSettings();   // the theme choices exist now, so mark the current one
 $("awakeToggle").addEventListener("change", e => {
   state.settings.awake = e.target.checked; save();
   if (e.target.checked) say("The screen will stay on while a timer runs, so you'll hear when it's done.");
@@ -854,7 +857,9 @@ $("moveAskDlg").addEventListener("close", () => { pendingMove = null; if (!state
 window.addEventListener("hashchange", receiveMove);
 
 /* ---------- Installing ---------- */
-registerServiceWorker();
+// When a new version takes over, offer a refresh rather than reloading mid-session.
+registerServiceWorker(() => { $("updateBanner").hidden = false; });
+$("updateBtn").addEventListener("click", () => { save(); location.reload(); });
 watchInstall(can => { $("installBtn").hidden = !can; });
 $("installBtn").addEventListener("click", async () => {
   if (await promptInstall()) say(`${nameOr()} has a home on your device now.`);
