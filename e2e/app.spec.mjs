@@ -193,6 +193,7 @@ test.describe("session comforts", () => {
     expect(await bg()).toBe("rgb(28, 25, 40)");
     await page.reload();
     expect(await bg()).toBe("rgb(28, 25, 40)");                          // remembered
+    await expect(page.locator("#themeChips").getByRole("radio", { name: "Dark" })).toBeChecked();
     await page.locator("#themeChips").getByRole("radio", { name: "Match device" }).check();
     expect(await bg()).toBe("rgb(238, 234, 248)");
   });
@@ -611,6 +612,23 @@ test.describe("invites", () => {
     await expect(page.locator("#invFrom")).toHaveValue("Alex");               // from the person, by name
   });
 
+  test("the certificate says who invited them, and the album keeps it", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime(),
+      invite: { from: "Jamie", to: "Alex", welcome: "", ps: {}, letter: "", accessory: null } }) });
+    await page.locator("#sealOpen").click();
+    await expect(page.locator("#certInvited")).toHaveText("Invited to Study Pet by Jamie");
+    await page.locator("#certNewPet").click();
+    await page.locator("#newPetGo").click();
+    await page.getByRole("button", { name: "Pip's certificate" }).click();
+    await expect(page.locator("#certInvited")).toHaveText("Invited to Study Pet by Jamie");
+  });
+
+  test("a certificate without an invite doesn't mention one", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime() }) });
+    await page.locator("#sealOpen").click();
+    await expect(page.locator("#certInvited")).toBeHidden();
+  });
+
   test("a damaged link explains itself and changes nothing", async ({ page }) => {
     await open(page, { save: petSave() });
     await page.goto("./#invite=eyJ2IjoyLCJmIjoiRX");
@@ -734,6 +752,16 @@ test("keeps the screen on only while a timer runs, when the setting is on", asyn
 
 test.describe("installed app", () => {
   test.use({ serviceWorkers: "allow" });
+
+  test("offers a refresh when a new version takes over, but not on the first install", async ({ page }) => {
+    await page.goto("./");
+    await page.waitForFunction(() => navigator.serviceWorker.controller !== null);
+    await expect(page.locator("#updateBanner")).toBeHidden();                // the first install isn't an update
+    await page.reload();                                                       // now an older version is running
+    await page.evaluate(() => navigator.serviceWorker.dispatchEvent(new Event("controllerchange")));
+    await expect(page.locator("#updateBanner")).toBeVisible();
+    await expect(page.locator("#updateBanner")).toContainText("A new version of Study Pet is ready.");
+  });
 
   test("is installable and opens offline after the first visit", async ({ page, context, browserName }) => {
     await page.goto("./");
