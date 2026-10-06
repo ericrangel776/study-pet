@@ -516,6 +516,32 @@ test("the album keeps a pet's earned traits, and a new pet starts without them",
   assert.deepEqual(s.traits, {});
 });
 
+test("a pause freezes the timer, once per session", () => {
+  const s = E.createState(at(2026, 10, 5, 8));
+  s.length = 25;
+  E.startFocus(s, at(2026, 10, 5, 9), MIN);
+  assert.equal(E.pauseFocus(s, at(2026, 10, 5, 9, 10)), true);
+  assert.equal(E.mood(s, at(2026, 10, 5, 9, 11)), "paused");
+  assert.equal(E.focusLeft(s, at(2026, 10, 5, 9, 13)), 15 * MIN);       // frozen at 15 minutes left
+  assert.equal(E.tickState(s, at(2026, 10, 5, 9, 13), NOTES), null);
+  E.resumeFocus(s, at(2026, 10, 5, 9, 13));                           // paused for 3 minutes
+  assert.equal(s.active.endAt, at(2026, 10, 5, 9, 28));
+  assert.equal(E.pauseFocus(s, at(2026, 10, 5, 9, 15)), false);       // only one pause
+  assert.equal(E.tickState(s, at(2026, 10, 5, 9, 28), NOTES).type, "focusDone");
+  assert.equal(s.minutes, 25);
+});
+
+test("a long pause ends on its own after 5 minutes", () => {
+  const s = E.createState(at(2026, 10, 5, 8));
+  s.length = 25;
+  E.startFocus(s, at(2026, 10, 5, 9), MIN);
+  E.pauseFocus(s, at(2026, 10, 5, 9, 10));
+  assert.equal(E.tickState(s, at(2026, 10, 5, 9, 14), NOTES), null);
+  assert.equal(E.tickState(s, at(2026, 10, 5, 9, 20), NOTES).type, "pauseOver");   // checked late, still only 5 minutes
+  assert.equal(s.active.pausedAt, null);
+  assert.equal(s.active.endAt, at(2026, 10, 5, 9, 30));
+});
+
 test("days ago counts calendar days, not 24-hour periods", () => {
   assert.equal(E.daysAgo(at(2026, 10, 5, 9), at(2026, 10, 5, 22)), 0);
   assert.equal(E.daysAgo(at(2026, 10, 4, 23), at(2026, 10, 5, 9)), 1);

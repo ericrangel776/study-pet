@@ -255,3 +255,7 @@ dialog details.ps-block textarea{min-height:64px}
 .tile-note[hidden]{display:none}
 .goal-pick{margin:4px 0 14px}
 .goal-pick legend{font-size:15px}
+
+/* Keyboard hint: only where there's a keyboard */
+.keys-hint{font-size:13px;color:var(--muted);flex-basis:100%}
+@media (pointer: coarse){.keys-hint{display:none}}

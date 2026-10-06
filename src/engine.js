@@ -12,6 +12,8 @@ export const LONG_EVERY = 4;           // every 4th session earns a long break
 export const REST_EVERY = 7;           // every 7 days in a row earns a rest day...
 export const MAX_REST = 2;             // ...and up to 2 can be saved
 export const GOALS = [0, 1, 2, 3, 4];  // sessions a day; 0 turns the daily goal off
+export const PAUSE_MAX = 5;            // one pause per session, up to 5 minutes (seconds in test mode)
+export const THEMES = ["auto", "light", "dark"];
 export const STAGES = [
   { name: "egg", at: 0 }, { name: "baby", at: 1 }, { name: "kid", at: 4 },
   { name: "teen", at: 10 }, { name: "grown-up", at: 20 }
@@ -54,7 +56,7 @@ export function createState(now, random = Math.random) {
     album: [],             // grown pets that moved on (see Album below)
     days: {},              // minutes studied per calendar day, keyed by dayKey()
     daySessions: {},       // sessions finished per calendar day, for the daily goal
-    settings: { sound: true, notify: false, awake: false, goal: 2, lastBackupAt: null }
+    settings: { sound: true, notify: false, awake: false, vibrate: true, goal: 2, theme: "auto", lastBackupAt: null }
   };
 }
 
@@ -86,6 +88,7 @@ export function migrate(raw, now) {
     for (const [k, v] of Object.entries(raw.daySessions)) if (Number.isInteger(v) && v > 0) s.daySessions[k] = v;
   s.restDays = Number.isInteger(raw.restDays) ? Math.max(0, Math.min(MAX_REST, raw.restDays)) : 0;
   if (!GOALS.includes(s.settings.goal)) s.settings.goal = 2;
+  if (!THEMES.includes(s.settings.theme)) s.settings.theme = "auto";
   s.settings = Object.assign(createState(now).settings, raw.settings || {});
   if (!raw.version) s.onBreak = null;
   s.version = SAVE_VERSION;
@@ -119,7 +122,7 @@ export function goalToday(s, now) {
   return { goal, done, met: goal > 0 && done >= goal };
 }
 export function mood(s, now) {
-  if (s.active) return "focus";
+  if (s.active) return s.active.pausedAt ? "paused" : "focus";
   if (s.onBreak) return "break";
   if (stageIndex(s) === 0) return "egg";
   const idle = s.lastStudyAt ? now - s.lastStudyAt : 0;
@@ -221,6 +224,22 @@ export function startFocus(s, now, unitMs) {
   s.active = { minutes: s.length, startedAt: now, endAt: now + s.length * unitMs, unitMs };
 }
 export function stopFocus(s) { s.active = null; }
+// A pause freezes the timer; resuming pushes the end back by the time paused.
+export function pauseFocus(s, now) {
+  const a = s.active;
+  if (!a || a.pausedAt || a.pauseUsed) return false;
+  a.pausedAt = now; a.pauseUsed = true;
+  return true;
+}
+export function resumeFocus(s, now) {
+  const a = s.active;
+  if (!a || !a.pausedAt) return;
+  a.endAt += Math.min(now, a.pausedAt + PAUSE_MAX * a.unitMs) - a.pausedAt;
+  a.pausedAt = null;
+}
+// Time left on the focus timer, frozen while paused.
+export const focusLeft = (s, now) => s.active.endAt - (s.active.pausedAt || now);
+export const pauseLeft = (s, now) => s.active.pausedAt + PAUSE_MAX * s.active.unitMs - now;
 export function endBreak(s) { s.onBreak = null; }
 
 // Credit a finished session. Uses the session's own end time, so a session
@@ -264,6 +283,11 @@ export function completeFocus(s, notesList) {
 
 // Called many times a second. Returns an event when a timer runs out, else null.
 export function tickState(s, now, notesList) {
+  if (s.active && s.active.pausedAt) {
+    if (pauseLeft(s, now) > 0) return null;
+    resumeFocus(s, now);
+    return { type: "pauseOver" };
+  }
   if (s.active && now >= s.active.endAt) {
     const r = completeFocus(s, notesList);
     r.breakSkipped = false;
