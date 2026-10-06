@@ -63,6 +63,7 @@
       </table>
     </section>
     <p class="next" id="next"></p>
+    <button class="link share-pet" id="cardOpen">Share a picture</button>
     <p class="msg" id="msg" aria-live="polite"></p>
 
     <section class="notes">
@@ -234,6 +235,17 @@
     <button class="primary" id="invAccept">Add it to my pet</button>
     <button class="link" data-close>Not now</button>
   </div>
+</dialog>
+
+<dialog id="cardDlg" aria-labelledby="cardTitle">
+  <h2 id="cardTitle">Share a picture</h2>
+  <img class="card-preview" id="cardImg" alt="">
+  <div class="row">
+    <button class="primary" id="cardShare" hidden>Share</button>
+    <button class="primary" id="cardSave">Save image</button>
+    <button class="link" data-close>Close</button>
+  </div>
+  <p class="msg-line" id="cardStatus" aria-live="polite"></p>
 </dialog>
 
 <dialog id="newPetDlg" aria-labelledby="newPetTitle">

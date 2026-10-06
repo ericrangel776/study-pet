@@ -190,6 +190,34 @@ test.describe("every pet is different", () => {
   });
 });
 
+test.describe("sharing a picture", () => {
+  test("makes a 1080x1350 picture of the pet and saves it", async ({ page }) => {
+    await page.addInitScript(() => { navigator.canShare = undefined; });     // a browser without file sharing
+    await open(page, { save: petSave({ name: "Mochi" }) });
+    await expect(page.locator("#cardOpen")).toHaveText("Share a picture of Mochi");
+    await page.locator("#cardOpen").click();
+    await expect(page.locator("#cardImg")).toHaveJSProperty("naturalWidth", 1080);
+    await expect(page.locator("#cardImg")).toHaveJSProperty("naturalHeight", 1350);
+    await expect(page.locator("#cardShare")).toBeHidden();
+    const download = page.waitForEvent("download");
+    await page.locator("#cardSave").click();
+    expect((await download).suggestedFilename()).toBe("study-pet-mochi.png");
+  });
+
+  test("uses the share sheet where the browser can share files", async ({ page }) => {
+    await page.addInitScript(() => {
+      navigator.canShare = () => true;
+      navigator.share = async data => { window.shared = { name: data.files[0].name, type: data.files[0].type, size: data.files[0].size, text: data.text }; };
+    });
+    await open(page, { save: petSave({ name: "Mochi" }) });
+    await page.locator("#cardOpen").click();
+    await page.locator("#cardShare").click();
+    const shared = await page.waitForFunction(() => window.shared).then(h => h.jsonValue());
+    expect(shared).toMatchObject({ name: "study-pet-mochi.png", type: "image/png", text: "Studying with Mochi on Study Pet." });
+    expect(shared.size).toBeGreaterThan(5000);
+  });
+});
+
 test.describe("the album", () => {
   const grown = (extra = {}) => petSave({ name: "Mochi", seed: 11, sessions: 20, minutes: 500, bestStreak: 6,
     firstStudyAt: MORNING.getTime() - 20 * 864e5, grownAt: MORNING.getTime() - 864e5, ...extra });
