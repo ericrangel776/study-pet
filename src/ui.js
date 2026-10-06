@@ -180,10 +180,15 @@ function render() {
   $("patLbl").textContent = m === "break" ? "Catch" : "Pat";
 
   $("focusLbl").textContent = state.active ? (now < stopArmed ? "Sure?" : "Stop")
-                            : state.onBreak ? "Next round" : "Focus";
+                            : state.onBreak ? "Next" : "Focus";   // six letters at most: they sit on the screen above each button
   // During a session the middle key pauses (once) and resumes.
   $("lengthLbl").textContent = !state.active ? "Length" : state.active.pausedAt ? "Resume" : "Pause";
   $("keyLength").disabled = !!state.active && state.active.pauseUsed && !state.active.pausedAt;
+  // The screen's soft-key labels name each button's current action; screen readers get the same name.
+  [["keyFocus", "focusLbl"], ["keyLength", "lengthLbl"], ["keyPat", "patLbl"]].forEach(([key, lbl]) => {
+    $(key).setAttribute("aria-label", $(lbl).textContent);
+    $(lbl).classList.toggle("off", $(key).disabled);
+  });
   document.querySelectorAll("#chips input").forEach(i => { i.disabled = !!state.active; i.checked = +i.value === state.length; });
 
   $("petName").textContent = nameOr();
