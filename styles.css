@@ -443,7 +443,7 @@ body.has-minibar{padding-bottom:84px}
 [data-shell="glacier"] body{font-family:"Outfit",ui-rounded,"Segoe UI",system-ui,sans-serif;
   background:radial-gradient(60vw 50vh at 15% 0%,color-mix(in srgb,var(--bg),#fff 45%),transparent),radial-gradient(50vw 50vh at 95% 85%,color-mix(in srgb,var(--bg),var(--bar) 18%),transparent),var(--bg);background-attachment:fixed}
 [data-shell="glacier"] .panel h1{font-weight:800;letter-spacing:-.02em;color:var(--chip-on)}
-[data-shell="glacier"] :is(.stats div,.week,.msg,.note-btn,.seal,.album li,.sticker,.tabs,.shell-pick:not(.shell-locked),.minibar){
+[data-shell="glacier"] :is(.week,.msg,.note-btn,.seal,.album li,.sticker,.tabs,.shell-pick:not(.shell-locked),.minibar){
   background:var(--glass);border-color:var(--glass-line);-webkit-backdrop-filter:blur(10px);backdrop-filter:blur(10px)}
 [data-shell="glacier"] .msg::before{background:var(--glass);border-color:var(--glass-line)}
 [data-shell="glacier"] .device{
@@ -594,13 +594,13 @@ body.has-minibar{padding-bottom:84px}
 [data-shell="classic"] .chips input:checked + span{transform:translateY(2px);box-shadow:inset 0 2px 3px rgba(0,0,0,.25),0 1px 0 var(--edge)}
 [data-shell="classic"] .tabs{box-shadow:inset 0 2px 4px rgba(30,20,70,.12)}
 [data-shell="classic"] .tabs [role="tab"][aria-selected="true"]{box-shadow:0 2px 0 var(--edge),0 1px 4px rgba(30,20,70,.12)}
-/* the stats as little LCD readouts */
-[data-shell="classic"] .stats div{border:0;border-radius:14px;padding:10px 10px 8px;color:var(--lcd-ink);
+/* the stats as little LCD readouts (Glacier's in its teal) */
+:is([data-shell="classic"],[data-shell="glacier"]) .stats div{border:0;border-radius:14px;padding:10px 10px 8px;color:var(--lcd-ink);
   background:radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--lcd), #fff 14%), var(--lcd) 60%, color-mix(in srgb, var(--lcd), #000 8%));
   box-shadow:inset 0 0 0 1px rgba(0,0,0,.18),inset 0 3px 6px rgba(0,0,0,.14),0 0 0 4px var(--bezel),0 5px 0 4px var(--edge)}
-[data-shell="classic"] .stats{gap:16px;margin:4px 4px 22px}
-[data-shell="classic"] .stats dt,[data-shell="classic"] .stats .tile-note{color:var(--lcd-ink);opacity:.75;font-family:"Silkscreen","Courier New",monospace;font-size:10px;line-height:1.3;text-transform:uppercase}
-[data-shell="classic"] .stats dd{font-family:"Silkscreen","Courier New",monospace;font-weight:400;font-size:19px;line-height:1.5;white-space:nowrap}
+:is([data-shell="classic"],[data-shell="glacier"]) .stats{gap:16px;margin:4px 4px 22px}
+:is([data-shell="classic"],[data-shell="glacier"]) :is(.stats dt,.stats .tile-note){color:var(--lcd-ink);opacity:.75;font-family:"Silkscreen","Courier New",monospace;font-size:10px;line-height:1.3;text-transform:uppercase}
+:is([data-shell="classic"],[data-shell="glacier"]) .stats dd{font-family:"Silkscreen","Courier New",monospace;font-weight:400;font-size:19px;line-height:1.5;white-space:nowrap}
 /* the main action looks like the device's own buttons */
 [data-shell="classic"] #treatBtn:not(:disabled),[data-shell="classic"] .primary{background:radial-gradient(circle at 35% 25%, #FFF2CC 0 6%, var(--btn) 45%, var(--btn-lo));
   color:#2A2440;box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 3px 0 var(--btn-lo)}
@@ -610,3 +610,99 @@ body.has-minibar{padding-bottom:84px}
 [data-shell="classic"] .week-bar{border-radius:2px 2px 0 0;background:linear-gradient(180deg,var(--shell-hi),var(--shell) 60%,var(--shell-lo))}
 [data-shell="classic"] .week-day.today .week-bar{background:linear-gradient(180deg,#FFE08A,var(--btn) 60%,var(--btn-lo))}
 [data-shell="classic"] .goal-dots span{border-radius:3px}
+
+/* ---------- Device details: the parts only some shells have ---------- */
+/* .deco holds six empty slots (d1 to d6) inside the device; each shell turns
+   on the ones it needs. They're decoration only. */
+.deco{display:none}
+.deco i{position:absolute;display:block;pointer-events:none}
+:root:is([data-shell="glacier"],[data-shell="sweet"],[data-shell="quest"]) .deco{display:block}
+
+/* Glacier: the insides show through the clear plastic */
+[data-shell="glacier"] .deco i{z-index:-1;opacity:.55;mix-blend-mode:multiply}   /* under the faceplate, over the plastic */
+[data-shell="glacier"] .d1{left:3.5%;top:41%;width:36px;height:36px;border-radius:50%;
+  background:radial-gradient(circle at 38% 32%,#FFFFFF,#C2CED2 45%,#8B9AA0 100%);box-shadow:inset 0 0 0 3px rgba(60,80,86,.35)}
+[data-shell="glacier"] .d1::after{content:"+";position:absolute;inset:0;display:grid;place-items:center;font:700 16px/1 system-ui,sans-serif;color:#5B6E74}
+[data-shell="glacier"] .d2{right:4.5%;top:42.5%;width:26px;height:26px}
+[data-shell="glacier"] .d2::before{content:"";position:absolute;inset:-5px 3px;background:repeating-linear-gradient(90deg,#9FB1B6 0 2px,transparent 2px 5px)}
+[data-shell="glacier"] .d2::after{content:"";position:absolute;inset:0;border-radius:3px;background:#1D2B2E}
+[data-shell="glacier"] .d3{left:50%;bottom:1.5%;width:30px;height:30px;transform:translateX(-50%);border-radius:50%;
+  background:repeating-radial-gradient(circle,#2B5E66 0 1.5px,transparent 1.5px 4.5px);box-shadow:0 0 0 2px rgba(43,94,102,.5)}
+/* a trace from the battery to the chip, running under the screen */
+[data-shell="glacier"] .d4{left:9%;right:9%;top:46%;height:2px;background:rgba(20,120,110,.4)}
+[data-shell="glacier"] .key .dot{background:radial-gradient(circle at 38% 30%,rgba(255,255,255,.95) 0 12%,rgba(255,170,160,.75) 46%,rgba(255,110,95,.85) 100%);
+  box-shadow:inset 0 -4px 8px rgba(160,40,30,.25),0 0 0 4px rgba(10,80,100,.16),0 0 0 5px rgba(255,255,255,.5),0 4px 0 rgba(217,87,74,.75),0 6px 8px rgba(0,0,0,.18)}
+[data-shell="glacier"] .loop::before{border-color:rgba(225,246,250,.85);box-shadow:inset 0 0 2px rgba(255,255,255,.9),inset -1px -2px 0 rgba(10,80,100,.2),1px 2px 3px rgba(10,80,100,.25)}
+
+/* Sweet shop: hearts and stars in the print, a candy charm, candy buttons, a scalloped frame */
+[data-shell="sweet"] .device{
+  background:
+    radial-gradient(90% 70% at 30% 16%, rgba(255,255,255,.5), rgba(255,255,255,0) 42%),
+    url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='44' height='44'%3E%3Ccircle cx='7' cy='7' r='3' fill='white'/%3E%3Cpath d='M30 8l1.7 3.4 3.8.6-2.7 2.6.6 3.8-3.4-1.8-3.4 1.8.6-3.8-2.7-2.6 3.8-.6z' fill='%23FFE36E'/%3E%3Cpath d='M12 35c-2.2-2.6-5-3.9-5-6.5a2.6 2.6 0 0 1 5-1.3 2.6 2.6 0 0 1 5 1.3c0 2.6-2.8 3.9-5 6.5z' fill='white' fill-opacity='.9'/%3E%3Ccircle cx='34' cy='34' r='2.2' fill='%23FFE36E'/%3E%3C/svg%3E") 0 0 / 44px 44px,
+    linear-gradient(160deg, #FFC2D6, #FF8FB3 48%, #F26C98)}
+[data-shell="sweet"] .d1{top:-30px;left:calc(50% + 26px);width:40px;height:26px;transform:rotate(16deg);transform-origin:0 0;z-index:-2;
+  background:url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' width='40' height='26'%3E%3Cpath d='M2 4l9 9-9 9z' fill='%238BE0C8'/%3E%3Cpath d='M38 4l-9 9 9 9z' fill='%238BE0C8'/%3E%3Ccircle cx='20' cy='13' r='10' fill='%23FF7FA8'/%3E%3Cpath d='M13 6c5 2 9 11 14 14' stroke='white' stroke-width='3' fill='none' opacity='.75'/%3E%3Ccircle cx='16' cy='9' r='2.2' fill='white' opacity='.95'/%3E%3C/svg%3E") center/contain no-repeat;
+  filter:drop-shadow(0 2px 1px rgba(150,30,80,.3))}
+[data-shell="sweet"] .d1::before{content:"";position:absolute;left:-12px;top:6px;width:16px;height:2px;background:#CFC9DD;transform:rotate(-16deg)}
+[data-shell="sweet"] .bezel{border:7px dotted #FFFFFF;background:#FFFFFF padding-box;padding:5px;
+  box-shadow:inset 0 0 0 3px #F26C98,0 2px 0 rgba(150,30,80,.2)}
+[data-shell="sweet"] .key .dot{background:
+    radial-gradient(circle at 35% 28%,rgba(255,255,255,.95) 0 9%,rgba(255,255,255,0) 30%),
+    repeating-conic-gradient(from 20deg at 50% 50%,#7FD9C0 0 30deg,#B9F0E0 30deg 60deg);
+  box-shadow:inset 0 -5px 8px rgba(30,110,90,.35),0 0 0 4px rgba(150,30,80,.15),0 0 0 5px rgba(255,255,255,.4),0 4px 0 #3FA587,0 6px 8px rgba(0,0,0,.18)}
+
+/* Card quest: the body is drawn on ::after so shoulder buttons can sit behind it */
+[data-shell="quest"] .device{background:none;box-shadow:none;padding-bottom:46px}
+[data-shell="quest"] .device::after{display:block;content:"";position:absolute;inset:0;left:0;right:0;bottom:0;height:auto;z-index:-1;border-radius:inherit;filter:none;
+  background:
+    linear-gradient(115deg,rgba(255,255,255,0) 30%,rgba(255,255,255,.1) 31%,rgba(255,255,255,.1) 42%,rgba(255,255,255,0) 43%),
+    radial-gradient(70% 50% at 50% 0%,rgba(255,255,255,.22),rgba(255,255,255,0) 60%),
+    radial-gradient(circle at 3px 4px,rgba(255,255,255,.1) .7px,transparent 1.3px) 0 0/11px 13px,
+    linear-gradient(180deg,#6650D6,#4A36B2 55%,#34268A);
+  box-shadow:inset 0 -8px 0 #2A1E70,inset 0 4px 0 rgba(255,255,255,.22),0 0 0 3px var(--outline)}
+[data-shell="quest"] .device::before{content:"";position:absolute;z-index:-3;left:12%;right:12%;bottom:-24px;height:22px;border-radius:50%;
+  background:radial-gradient(closest-side,rgba(0,0,0,.45),transparent);filter:blur(2px)}
+[data-shell="quest"] :is(.d1,.d2){top:-9px;width:92px;height:28px;z-index:-2;border-radius:18px 18px 4px 4px;
+  background:linear-gradient(180deg,#8C7BEA,#4A36B2);box-shadow:0 0 0 3px var(--outline),inset 0 2px 0 rgba(255,255,255,.35)}
+[data-shell="quest"] .d1{left:30px}
+[data-shell="quest"] .d2{right:30px}
+[data-shell="quest"] .d1::after,[data-shell="quest"] .d2::after{position:absolute;top:2px;font:8px/1 "Press Start 2P",monospace;color:#E6E1FF}
+[data-shell="quest"] .d1::after{content:"L";left:14px}
+[data-shell="quest"] .d2::after{content:"R";right:14px}
+[data-shell="quest"] :is(.d3,.d4){bottom:26px;width:30px;height:9px;border-radius:5px;background:#1E1A4A;transform:rotate(-24deg);box-shadow:inset 0 -2px 0 #0B0A22}
+[data-shell="quest"] .d3{left:calc(50% - 40px)}
+[data-shell="quest"] .d4{left:calc(50% + 10px)}
+[data-shell="quest"] .d3::after,[data-shell="quest"] .d4::after{position:absolute;top:12px;left:50%;transform:translateX(-50%) rotate(24deg);transform-origin:50% 0;font:8px/1 "Pixelify Sans",sans-serif;letter-spacing:.08em;color:#C9C3F2;white-space:nowrap}
+[data-shell="quest"] .d3::after{content:"SELECT"}
+[data-shell="quest"] .d4::after{content:"START"}
+[data-shell="quest"] .d5{right:26px;bottom:20px;width:34px;height:26px;transform:rotate(-24deg);
+  background:repeating-linear-gradient(90deg,#1E1A4A 0 3px,transparent 3px 7px);border-radius:3px}
+[data-shell="quest"] .d6{left:34px;top:26px;width:8px;height:8px;border-radius:50%;background:#7CFF8A;box-shadow:0 0 0 2px #1E1A4A,0 0 8px #7CFF8A}
+[data-shell="quest"] .d6::after{content:"POWER";position:absolute;left:14px;top:-1px;font:8px/1 "Pixelify Sans",sans-serif;letter-spacing:.1em;color:#C9C3F2}
+[data-shell="quest"] .bezel{box-shadow:inset 0 0 0 2px #0B0A22,0 0 0 2px #7E6FE0,0 0 0 4px #2A1E70}
+@media (prefers-reduced-motion: no-preference){[data-shell="quest"] .d6{animation:quest-led 3s ease-in-out infinite}}
+@keyframes quest-led{50%{opacity:.6}}
+@media (max-width:480px){
+  [data-shell="quest"] :is(.d1,.d2){width:64px}
+  [data-shell="quest"] .d1{left:18px}[data-shell="quest"] .d2{right:18px}
+  [data-shell="quest"] .d5{right:12px;transform:rotate(-24deg) scale(.8)}
+  [data-shell="quest"] .d6{left:20px;top:22px}
+}
+
+/* ---------- Panel touch-ups for the other shells ---------- */
+:root[data-shell="glacier"]{--edge:#B5DBE3}
+:root[data-shell="glacier"][data-theme="dark"]{--edge:#061519}
+@media (prefers-color-scheme: dark){:root[data-shell="glacier"]:not([data-theme="light"]){--edge:#061519}}
+:root[data-shell="sweet"]{--edge:#F4B3C9}
+:root[data-shell="sweet"][data-theme="dark"]{--edge:#170A12}
+@media (prefers-color-scheme: dark){:root[data-shell="sweet"]:not([data-theme="light"]){--edge:#170A12}}
+/* keycap chips for Glacier (glass) and Sweet shop (candy) */
+:is([data-shell="glacier"],[data-shell="sweet"]) .chips span{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 3px 0 var(--edge);transition:transform .08s,box-shadow .08s}
+:is([data-shell="glacier"],[data-shell="sweet"]) .chips input:checked + span{transform:translateY(2px);box-shadow:inset 0 2px 3px rgba(0,0,0,.22),0 1px 0 var(--edge)}
+[data-shell="glacier"] .chips span{background:var(--glass);border:1px solid var(--glass-line);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
+[data-shell="glacier"] .chips input:checked + span{background:var(--chip-on);border-color:var(--chip-on)}
+[data-shell="sweet"] .chips input:checked + span{background:repeating-linear-gradient(135deg,var(--chip-on) 0 8px,color-mix(in srgb,var(--chip-on),#fff 18%) 8px 16px)}
+:is([data-shell="glacier"],[data-shell="sweet"]) .tabs [role="tab"][aria-selected="true"]{box-shadow:0 2px 0 var(--edge),0 1px 4px rgba(30,20,70,.12)}
+/* Card quest's chips press in too */
+[data-shell="quest"] .chips span{box-shadow:0 0 0 2px var(--outline),inset 0 0 0 1px #4A63D8,0 3px 0 2px var(--outline);transition:transform .08s,box-shadow .08s}
+[data-shell="quest"] .chips input:checked + span{transform:translateY(2px);box-shadow:0 0 0 2px var(--outline),inset 0 2px 0 rgba(0,0,0,.25),0 1px 0 2px var(--outline)}
