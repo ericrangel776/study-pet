@@ -2,7 +2,19 @@
 // It reads state but never changes it.
 
 const W = 64, H = 48, GROUND = 45;
-const INK = "#28331F", BODY = "#AAB98C", SPOT = "#93A276", GHOST = "rgba(40,51,31,.17)", LCD = "#B9C79A";
+// Screen colors. Each device shell has its own (see SHELLS in config.js); the
+// screen behind the canvas is styled to match in styles.css.
+export const PALETTES = {
+  classic: { ink: "#28331F", body: "#AAB98C", spot: "#93A276", ghost: "rgba(40,51,31,.17)", lcd: "#B9C79A" },
+  glacier: { ink: "#133A40", body: "#A3CFC9", spot: "#86B8B2", ghost: "rgba(19,58,64,.17)", lcd: "#BFE0DC" },
+  sweet:   { ink: "#4A2238", body: "#F2BACD", spot: "#E59AB5", ghost: "rgba(74,34,56,.17)", lcd: "#F6E6D6" },
+  quest:   { ink: "#1A1640", body: "#C9BFFF", spot: "#A496F0", ghost: "rgba(26,22,64,.16)", lcd: "#E6EAFF" }
+};
+let INK, BODY, SPOT, GHOST, LCD;
+export function setPalette(id) {
+  ({ ink: INK, body: BODY, spot: SPOT, ghost: GHOST, lcd: LCD } = PALETTES[id] || PALETTES.classic);
+}
+setPalette("classic");
 export const HATCH_MS = 3600, GROW_MS = 1800, PAT_MS = 1200;
 
 let cx = null;   // the canvas context for the frame being drawn

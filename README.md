@@ -69,6 +69,11 @@ After the first visit, the app opens without an internet connection.
   (notes, the certificate, stickers, the Album; a badge counts what's new) and **Settings**. The pet's messages show
   in a bubble under the device. On a phone, scrolling the device away during a session or break brings up a bar
   with the time and the Pause and Stop buttons.
+- **Device shells** change the whole look, like collecting new releases of a toy: **Classic** and **Glacier**
+  (clear plastic) from the start, **Sweet shop** (a printed pink shell) for a 7-day streak, and **Card quest**
+  (a pocket RPG handheld, always dark) for raising a pet to grown-up. Pick one in Settings. The list is `SHELLS`
+  in `src/config.js`; each shell's style is under `[data-shell]` in `styles.css`, and its screen colors are
+  `PALETTES` in `src/render.js`. Test mode can try any shell.
 - Press **T** in the app to switch to test mode, where sessions last seconds instead of minutes. Nothing done in test mode is saved, and pressing **T** again returns to your real progress.
   In test mode, **H** steps through the holiday looks.
 - **Invite a friend** (in Collection, and on the certificate) makes a link that sends someone their own pet with

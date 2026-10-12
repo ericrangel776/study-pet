@@ -53,6 +53,7 @@ export function createState(now, random = Math.random) {
     bestCatches: 0,                 // the break game's best run
     treats: 0, treatsGiven: 0,      // earned by meeting the daily goal (see Treats)
     stickers: {},                   // lifetime milestones across every pet (see Stickers)
+    shells: {},                     // device shells earned so far (see Shells)
     userName: "", certSeen: false,     // userName: the person, used across the app and on the certificate
     length: 25, breakLength: 5, longBreak: 15, active: null, onBreak: null,
     notes: {},
@@ -60,7 +61,7 @@ export function createState(now, random = Math.random) {
     album: [],             // grown pets that moved on (see Album below)
     days: {},              // minutes studied per calendar day, keyed by dayKey()
     daySessions: {},       // sessions finished per calendar day, for the daily goal
-    settings: { sound: true, notify: false, awake: false, vibrate: true, goal: 2, theme: "auto", holidays: true, lastBackupAt: null }
+    settings: { sound: true, notify: false, awake: false, vibrate: true, goal: 2, theme: "auto", shell: "classic", holidays: true, lastBackupAt: null }
   };
 }
 
@@ -99,6 +100,9 @@ export function migrate(raw, now) {
   s.stickers = {};
   if (raw.stickers && typeof raw.stickers === "object")
     for (const [k, v] of Object.entries(raw.stickers)) if (v && Number.isFinite(v.at)) s.stickers[k] = { at: v.at, read: !!v.read };
+  s.shells = {};
+  if (raw.shells && typeof raw.shells === "object")
+    for (const [k, v] of Object.entries(raw.shells)) if (v && Number.isFinite(v.at)) s.shells[k] = { at: v.at, seen: !!v.seen };
   s.restDays = Number.isInteger(raw.restDays) ? Math.max(0, Math.min(MAX_REST, raw.restDays)) : 0;
   if (!GOALS.includes(s.settings.goal)) s.settings.goal = 2;
   if (!THEMES.includes(s.settings.theme)) s.settings.theme = "auto";
@@ -438,8 +442,8 @@ export function lifetime(s) {
 // Milestones for the long run. Unlike notes they count every pet the person has
 // raised, so they keep coming after the certificate, and a new egg keeps them.
 // Each sticker needs one lifetime total: sessions, minutes, streak (the best
-// one), pets (fully grown) or treats (given).
-export function stickerProgress(s, k) {
+// one), pets (fully grown) or treats (given). Shells use the same totals.
+export function milestoneProgress(s, k) {
   const [key, need] = Object.entries(k.need)[0], have = lifetime(s)[key === "streak" ? "bestStreak" : key];
   return { have: Math.min(have, need), need };
 }
@@ -447,12 +451,28 @@ export function unlockStickers(s, now, stickerList) {
   const got = [];
   stickerList.forEach(k => {
     if (s.stickers[k.id]) return;
-    const p = stickerProgress(s, k);
+    const p = milestoneProgress(s, k);
     if (p.have >= p.need) { s.stickers[k.id] = { at: now, read: false }; got.push(k); }
   });
   return got;
 }
 export const unreadStickers = (s, stickerList) => stickerList.filter(k => s.stickers[k.id] && !s.stickers[k.id].read).length;
+
+/* ---------- Shells ---------- */
+// Like collecting new releases of a toy: the device comes in shells that
+// change how the whole app looks. Shells without `need` are there from the
+// start; the rest are earned with a lifetime milestone and kept for good.
+export const shellOpen = (s, k) => !k.need || !!s.shells[k.id];
+export function unlockShells(s, now, shellList) {
+  const got = [];
+  shellList.forEach(k => {
+    if (!k.need || s.shells[k.id]) return;
+    const p = milestoneProgress(s, k);
+    if (p.have >= p.need) { s.shells[k.id] = { at: now, seen: false }; got.push(k); }
+  });
+  return got;
+}
+export const unseenShells = (s, shellList) => shellList.filter(k => s.shells[k.id] && !s.shells[k.id].seen).length;
 
 /* ---------- Treats ---------- */
 // Meeting the daily goal earns a treat (see completeFocus). Giving one adds a
