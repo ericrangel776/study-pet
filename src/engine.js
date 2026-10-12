@@ -361,6 +361,14 @@ export function noteMet(s, n, now) {
       && (!q.streak   || streakNow(s, now) >= q.streak)
       && (!q.minutes  || s.minutes >= q.minutes);
 }
+// How close a locked note is: { have, need, unit } for its requirement,
+// counted the way noteMet checks it (the streak is the current one).
+export function noteProgress(s, n, now) {
+  const q = n.need;
+  if (q.streak) return { have: Math.min(streakNow(s, now), q.streak), need: q.streak, unit: "days" };
+  if (q.minutes) return { have: Math.min(Math.floor(s.minutes / 60), q.minutes / 60), need: q.minutes / 60, unit: "hours" };
+  return { have: Math.min(s.sessions, q.sessions), need: q.sessions, unit: "sessions" };
+}
 export function unlockNotes(s, now, notesList) {
   const got = [];
   notesList.forEach(n => {

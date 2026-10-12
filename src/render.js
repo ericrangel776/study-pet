@@ -287,7 +287,7 @@ function drawHatch(t, now, rm, dog, accessory, look) {
 }
 
 /* ---------- One frame ---------- */
-// v = { now, mood, stage, hearts, unread, hatchAt, growAt, patAt, catchAt, treatAt, rm, dog, accessory, look, holiday, portrait }
+// v = { now, mood, stage, hearts, unread, treats, hatchAt, growAt, patAt, catchAt, treatAt, rm, dog, accessory, look, holiday, portrait }
 export function draw(ctx, v) {
   cx = ctx;
   const { now, mood: m, stage: st, rm, holiday } = v;
@@ -295,6 +295,7 @@ export function draw(ctx, v) {
   if (holiday) { drawHolidayBack(holiday, now, rm); drawHolidayFront(holiday, now, rm); }
   if (!v.portrait) for (let k = 0; k < 4; k++) sprite(HEART, 2 + k * 6, 2, k < v.hearts ? INK : GHOST);   // portrait: just the pet, for the certificate
   if (v.unread && !v.portrait && Math.floor(now / 500) % 2) sprite(ENVELOPE, 55, 2, INK);
+  if (v.treats && !v.portrait) sprite2(COOKIE[0], 28, 2);   // a treat is waiting
 
   if (now - v.hatchAt < HATCH_MS) { drawHatch(now - v.hatchAt, now, rm, v.dog, v.accessory, v.look); return; }
 

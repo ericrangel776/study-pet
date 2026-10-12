@@ -2,7 +2,7 @@
   --bg:#EEEAF8; --ink:#2A2440; --muted:#635B80; --panel:#FFFFFF; --line:#D8D1EE;
   --shell:#8F7FD0; --shell-hi:#B3A7E6; --shell-lo:#6A5AAE; --bezel:#3B335F;
   --btn:#F2C14E; --btn-lo:#C9982A; --chip:#E4DEF6; --chip-on:#2A2440; --chip-on-ink:#FFFFFF;
-  --lcd:#B9C79A; --lcd-ink:#28331F; --bar:#8F7FD0;
+  --lcd:#B9C79A; --lcd-ink:#28331F; --bar:#8F7FD0; --tab-on:#FFFFFF;
   box-sizing:border-box;
   padding-top:env(safe-area-inset-top,0px);
   padding-bottom:env(safe-area-inset-bottom,0px);
@@ -11,13 +11,13 @@
   :root:not([data-theme="light"]){
     --bg:#1C1928; --ink:#ECE8F8; --muted:#A79FC4; --panel:#262236; --line:#3A3452;
     --shell:#6E5FB5; --shell-hi:#8E80CF; --shell-lo:#4C3F8C; --bezel:#2A2347;
-    --chip:#332D48; --chip-on:#F2C14E; --chip-on-ink:#2A2440; --bar:#8E80CF;
+    --chip:#332D48; --chip-on:#F2C14E; --chip-on-ink:#2A2440; --bar:#8E80CF; --tab-on:#4F4672;
   }
 }
 :root[data-theme="dark"]{
   --bg:#1C1928; --ink:#ECE8F8; --muted:#A79FC4; --panel:#262236; --line:#3A3452;
   --shell:#6E5FB5; --shell-hi:#8E80CF; --shell-lo:#4C3F8C; --bezel:#2A2347;
-  --chip:#332D48; --chip-on:#F2C14E; --chip-on-ink:#2A2440; --bar:#8E80CF;
+  --chip:#332D48; --chip-on:#F2C14E; --chip-on-ink:#2A2440; --bar:#8E80CF; --tab-on:#4F4672;
 }
 *,*::before,*::after{box-sizing:inherit}
 html{height:100%;scroll-padding-top:env(safe-area-inset-top,0px)}
@@ -31,7 +31,7 @@ main{max-width:940px;margin:0 auto;padding:44px 20px 56px;display:grid;
 @media (max-width:760px){main{grid-template-columns:1fr;gap:32px;padding-top:36px}}
 
 /* The device: a glossy plastic egg with a faceplate, an LCD and three buttons */
-.device-wrap{display:flex;justify-content:center;padding:34px 0 30px}
+.device-wrap{display:flex;flex-direction:column;align-items:center;padding:34px 0 30px}
 @media (min-width:761px){.device-wrap{position:sticky;top:calc(env(safe-area-inset-top,0px) + 24px)}}
 .device{position:relative;isolation:isolate;width:min(370px,100%);
   border-radius:50% 50% 46% 46% / 58% 58% 42% 42%;
@@ -121,7 +121,7 @@ main{max-width:940px;margin:0 auto;padding:44px 20px 56px;display:grid;
 .chips{display:flex;flex-wrap:wrap;gap:8px}
 .chips label{position:relative}
 .chips input{position:absolute;opacity:0;inset:0;margin:0;cursor:pointer}
-.chips span{display:inline-block;padding:7px 15px;border-radius:999px;background:var(--chip);font-weight:500}
+.chips span{display:inline-block;padding:7px 13px;border-radius:999px;background:var(--chip);font-weight:500}
 .chips input:checked + span{background:var(--chip-on);color:var(--chip-on-ink)}
 .chips input:focus-visible + span{outline:3px solid var(--ink);outline-offset:2px}
 .chips input:disabled + span{opacity:.5}
@@ -144,12 +144,19 @@ main{max-width:940px;margin:0 auto;padding:44px 20px 56px;display:grid;
 .week-cap{font-size:12px;font-weight:500;line-height:1;margin-bottom:4px;white-space:nowrap}
 .week-lbl{font-size:12px;color:var(--muted);margin-top:4px}
 .week-day.today .week-lbl{color:var(--ink);font-weight:600}
+/* days the daily goal was met get a dot under the label */
+.week-lbl::after{content:"";display:block;width:5px;height:5px;margin:2px auto 0;border-radius:50%}
+.week-day.met .week-lbl::after{background:var(--btn)}
 .week-tip{position:absolute;top:0;transform:translateX(-50%);background:var(--ink);color:var(--bg);
   font-size:13px;line-height:1.3;padding:5px 9px;border-radius:8px;white-space:nowrap;pointer-events:none;z-index:1}
 .week-tip[hidden]{display:none}
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
 .next{margin:0 0 16px;color:var(--muted)}
-.msg{min-height:3.2em;background:var(--panel);border:1px solid var(--line);border-radius:16px 16px 16px 4px;padding:12px 14px;margin:0 0 24px}
+/* The pet's speech bubble, right under the device so results show where you're looking */
+.msg{position:relative;width:min(370px,100%);min-height:3.2em;margin:40px 0 0;background:var(--panel);border:1px solid var(--line);
+  border-radius:16px;padding:12px 14px;box-shadow:0 6px 16px -8px rgba(30,20,70,.25)}
+.msg::before{content:"";position:absolute;top:-8px;left:50%;width:14px;height:14px;transform:translateX(-50%) rotate(45deg);
+  background:var(--panel);border-left:1px solid var(--line);border-top:1px solid var(--line)}
 .msg:empty{visibility:hidden}
 
 .notes h2{font-size:20px;font-weight:600;margin:0 0 10px}
@@ -157,11 +164,16 @@ main{max-width:940px;margin:0 auto;padding:44px 20px 56px;display:grid;
 .note-btn{width:100%;display:flex;justify-content:space-between;align-items:center;gap:10px;text-align:left;
   background:var(--panel);border:1px solid var(--line);border-radius:14px;padding:9px 14px;cursor:pointer;font-weight:500}
 .note-btn .new{font-size:13px;background:var(--btn);color:#2A2440;border-radius:999px;padding:1px 9px}
-.notes-links{display:flex;flex-wrap:wrap;gap:8px 18px;margin:-12px 0 24px;font-size:15px}
+.notes-links{display:flex;flex-wrap:wrap;gap:0 18px;margin:-20px 0 16px;font-size:15px}
 .locked{display:block;border:1px dashed var(--line);border-radius:14px;padding:9px 14px;color:var(--muted)}
 
-.tools{display:flex;gap:18px;flex-wrap:wrap;align-items:center;font-size:15px}
-.link{background:none;border:0;padding:0;color:var(--muted);text-decoration:underline;text-underline-offset:3px;cursor:pointer}
+.tools{display:flex;gap:0 18px;flex-wrap:wrap;align-items:center;font-size:15px;margin-top:8px}
+/* Text buttons: underlined text, but a full 44px tall so they're easy to tap */
+.link{display:inline-flex;align-items:center;min-height:44px;background:none;border:0;padding:0;color:var(--muted);
+  text-decoration:underline;text-underline-offset:3px;cursor:pointer;text-align:left}
+.link.danger{color:#B4325A}
+:root[data-theme="dark"] .link.danger{color:#F08AA8}
+@media (prefers-color-scheme: dark){:root:not([data-theme="light"]) .link.danger{color:#F08AA8}}
 .tag{font-size:13px;background:var(--btn);color:#2A2440;border-radius:999px;padding:2px 10px;font-weight:500}
 .tag[hidden]{display:none}
 
@@ -175,11 +187,12 @@ dialog input{width:100%;font:inherit;padding:10px 14px;border-radius:12px;border
 
 
 /* Settings and backup */
-.settings h2{font-size:20px;font-weight:600;margin:0 0 12px}
+.set-group{margin:0 0 26px}
+.set-group h2{font-size:13px;font-weight:600;letter-spacing:.06em;text-transform:uppercase;color:var(--muted);margin:0 0 10px}
 .switch{display:flex;align-items:center;gap:10px;margin:0 0 10px;cursor:pointer}
 .switch[hidden]{display:none}
 .switch input{width:20px;height:20px;accent-color:var(--shell);margin:0}
-.backup-row{display:flex;gap:10px;flex-wrap:wrap;margin:16px 0 8px}
+.backup-row{display:flex;gap:10px;flex-wrap:wrap;margin:0 0 8px}
 .secondary{background:var(--chip);border:0;border-radius:999px;padding:8px 18px;font-weight:500;cursor:pointer}
 .secondary.nudge{background:var(--btn);color:#2A2440}
 .secondary:disabled{opacity:.5;cursor:not-allowed}
@@ -293,7 +306,7 @@ dialog details.ps-block textarea{min-height:64px}
 #certDlg .row [hidden]{display:none}
 
 /* Shareable picture */
-.share-pet{margin:-8px 0 16px;font-size:15px}
+.share-pet{margin:-14px 0 4px;font-size:15px}
 .card-preview{display:block;width:100%;aspect-ratio:1080/1350;border-radius:14px;border:1px solid var(--line);margin:0 0 16px;background:#EEEAF8}
 #cardDlg .row [hidden]{display:none}
 
@@ -308,13 +321,13 @@ dialog details.ps-block textarea{min-height:64px}
 .goal-dots{display:flex;gap:5px}
 .goal-dots span{width:14px;height:14px;border-radius:50%;border:2px solid var(--bar)}
 .goal-dots span.on{background:var(--bar)}
-.tile-note{display:block;font-size:12px;color:var(--muted);margin-top:2px}
+.tile-note{display:block;font-size:12px;color:var(--muted);margin-top:2px;white-space:nowrap}
 .tile-note[hidden]{display:none}
 .goal-pick{margin:4px 0 14px}
 .goal-pick legend{font-size:15px}
 
 /* Keyboard hint: only where there's a keyboard */
-.keys-hint{font-size:13px;color:var(--muted);flex-basis:100%}
+.keys-hint{display:block;font-size:13px;color:var(--muted);margin-top:4px}
 @media (pointer: coarse){.keys-hint{display:none}}
 
 /* "Invited by" on the certificate */
@@ -351,3 +364,38 @@ button.sticker{cursor:pointer;font-weight:500}
 
 /* Halloween week: the LCD dims to dusk */
 .device[data-holiday="halloween"] .lcd{background:radial-gradient(ellipse at 50% 38%, #AEB98C, #9DAA7D 55%, #8A976B)}
+
+/* Timer: focus and break lengths, one row each */
+.timer-pick{margin:0 0 20px;display:grid;gap:12px}
+.pick-row{border:0;margin:0;padding:0}
+.pick-row legend{padding:0;margin-bottom:6px;font-weight:500;font-size:15px}
+
+/* Tabs: Today, Collection, Settings */
+.tabs{display:grid;grid-template-columns:repeat(3,1fr);gap:4px;padding:4px;margin:0 0 22px;border-radius:999px;background:var(--chip)}
+.tabs [role="tab"]{position:relative;min-height:40px;border:0;border-radius:999px;background:none;font-weight:500;cursor:pointer;
+  display:inline-flex;align-items:center;justify-content:center;gap:6px;padding:0 8px}
+.tabs [role="tab"][aria-selected="true"]{background:var(--tab-on);box-shadow:0 1px 4px rgba(30,20,70,.15)}
+.tabs [role="tab"]:focus-visible{outline-offset:-3px}
+.tab-badge{min-width:20px;height:20px;padding:0 6px;border-radius:999px;background:var(--btn);color:#2A2440;font-size:12px;line-height:20px;font-weight:600}
+.tab-badge[hidden]{display:none}
+.tab-panel[hidden]{display:none}
+.panel > .tag:not([hidden]){display:inline-block;margin:0 0 14px}
+
+/* Locked notes show how close they are */
+.locked{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.locked > span:first-child{flex:1;min-width:0}
+.locked .note-progress{font-size:13px;white-space:nowrap}
+.stickers #stickersMore{margin:-16px 0 16px;font-size:15px}
+.stickers #stickersMore[hidden]{display:none}
+
+/* While a timer runs and the device is scrolled away, a bar keeps the time and controls in reach */
+.minibar{position:fixed;z-index:20;left:50%;bottom:calc(env(safe-area-inset-bottom,0px) + 12px);transform:translateX(-50%);
+  width:min(560px,calc(100% - 24px));display:flex;align-items:center;gap:10px;padding:8px 8px 8px 16px;border-radius:999px;
+  background:var(--panel);border:1px solid var(--line);box-shadow:0 10px 30px -8px rgba(30,20,70,.4)}
+.minibar[hidden]{display:none}
+body.has-minibar{padding-bottom:84px}
+.mini-what{color:var(--muted);font-size:15px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}
+.mini-time{font-family:"Silkscreen","Courier New",monospace;font-size:18px;margin-right:auto}
+.minibar button{white-space:nowrap;padding:8px 16px}
+.minibar #miniPause[hidden]{display:none}
+@media print{.minibar{display:none}}

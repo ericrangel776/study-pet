@@ -46,119 +46,149 @@
         <button class="key" id="keyPat" aria-label="Pat"><span class="dot"></span><span class="engrave" aria-hidden="true">C</span></button>
       </div>
     </div>
+    <p class="msg" id="msg" aria-live="polite"></p>
   </div>
 
   <section class="panel">
     <h1 id="petName">Study Pet</h1>
-    <p class="lead">Finish a focus session to feed your pet, then take a short break together. Skip a few days and it gets sleepy, but it never goes away.</p>
+    <p class="lead" id="lead">Finish a focus session to feed your pet, then take a short break together. Skip a few days and it gets sleepy, but it never goes away.</p>
     <p class="dedication" id="dedication" hidden></p>
+    <span class="tag" id="testTag" hidden>Test mode: seconds, not saved</span>
 
-    <fieldset class="lengths">
-      <legend>Session length</legend>
-      <div class="chips" id="chips"></div>
-    </fieldset>
-    <fieldset class="lengths">
-      <legend>Break length</legend>
-      <div class="chips" id="breakChips"></div>
-    </fieldset>
-
-    <dl class="stats">
-      <div><dt>Day streak</dt><dd id="stStreak">0</dd><span class="tile-note" id="stRest" hidden></span></div>
-      <div><dt>Sessions</dt><dd id="stSessions">0</dd></div>
-      <div><dt>Focus time</dt><dd id="stTime">0m</dd></div>
-    </dl>
-    <p class="goal" id="goalLine" hidden><span class="goal-dots" id="goalDots" aria-hidden="true"></span><span id="goalText"></span></p>
-    <div class="treats" id="treatRow" hidden>
-      <button class="secondary" id="treatBtn">Give a treat</button>
-      <span class="treat-count" id="treatCount"></span>
+    <div class="tabs" role="tablist" aria-label="Sections">
+      <button role="tab" id="tabToday" aria-controls="panelToday" aria-selected="true">Today</button>
+      <button role="tab" id="tabCollection" aria-controls="panelCollection" aria-selected="false" tabindex="-1">Collection<span class="tab-badge" id="collectionBadge" hidden></span></button>
+      <button role="tab" id="tabSettings" aria-controls="panelSettings" aria-selected="false" tabindex="-1">Settings</button>
     </div>
-    <section class="week" aria-labelledby="weekTitle">
-      <div class="week-head"><h2 id="weekTitle">This week</h2><span class="week-total" id="weekTotal"></span></div>
-      <div class="week-plot">
-        <div class="week-chart" id="weekChart" aria-hidden="true"></div>
-        <div class="week-tip" id="weekTip" hidden></div>
-      </div>
-      <table class="sr-only">
-        <caption>Focus time each day this week</caption>
-        <thead><tr><th scope="col">Day</th><th scope="col">Focus time</th></tr></thead>
-        <tbody id="weekTable"></tbody>
-      </table>
-    </section>
-    <p class="next" id="next"></p>
-    <button class="link share-pet" id="cardOpen">Share a picture</button>
-    <p class="msg" id="msg" aria-live="polite"></p>
 
-    <section class="notes">
-      <h2 id="notesTitle">Notes</h2>
-      <ul id="notesList"></ul>
-      <div class="seal" id="sealLocked">
-        <div class="seal-head">
-          <span class="seal-badge" aria-hidden="true"></span>
-          <div><strong>Sealed certificate</strong><span id="sealHint"></span></div>
+    <div class="tab-panel" role="tabpanel" id="panelToday" aria-labelledby="tabToday">
+      <div class="timer-pick">
+        <fieldset class="pick-row">
+          <legend>Focus length</legend>
+          <div class="chips" id="chips"></div>
+        </fieldset>
+        <fieldset class="pick-row">
+          <legend>Break length</legend>
+          <div class="chips" id="breakChips"></div>
+        </fieldset>
+      </div>
+
+      <dl class="stats">
+        <div><dt>Day streak</dt><dd id="stStreak">0</dd><span class="tile-note" id="stRest" hidden></span></div>
+        <div><dt>Sessions</dt><dd id="stSessions">0</dd></div>
+        <div><dt>Focus time</dt><dd id="stTime">0m</dd></div>
+      </dl>
+      <p class="goal" id="goalLine" hidden><span class="goal-dots" id="goalDots" aria-hidden="true"></span><span id="goalText"></span></p>
+      <div class="treats" id="treatRow" hidden>
+        <button class="secondary" id="treatBtn">Give a treat</button>
+        <span class="treat-count" id="treatCount"></span>
+      </div>
+      <section class="week" aria-labelledby="weekTitle">
+        <div class="week-head"><h2 id="weekTitle">This week</h2><span class="week-total" id="weekTotal"></span></div>
+        <div class="week-plot">
+          <div class="week-chart" id="weekChart" aria-hidden="true"></div>
+          <div class="week-tip" id="weekTip" hidden></div>
         </div>
-        <div class="meter" id="sealMeter" role="progressbar" aria-label="Sessions toward the certificate" aria-valuemin="0"><span id="sealFill"></span></div>
-        <span class="seal-count" id="sealCount"></span>
-      </div>
-      <button class="seal seal-open" id="sealOpen" hidden>
-        <span class="seal-badge open" aria-hidden="true"></span>
-        <span><strong>Your certificate</strong><span>Unsealed! Tap to open it.</span></span>
-        <span class="new" id="sealNew">New</span>
-      </button>
-      <button class="secondary seal-next" id="sealNewPet" hidden>Raise a new pet</button>
-      <div class="notes-links">
-        <button class="link" id="invOpen">Invite a friend</button>
-        <button class="link" id="invPasteOpen">Paste a link</button>
-      </div>
-    </section>
-
-    <section class="stickers" aria-labelledby="stickersTitle">
-      <h2 id="stickersTitle">Stickers</h2>
-      <p class="hint">For the long run. They count every pet you raise, so they stay when a new egg arrives.</p>
-      <ul id="stickerList"></ul>
-    </section>
-
-    <section class="album" id="album" aria-labelledby="albumTitle" hidden>
-      <h2 id="albumTitle">Album</h2>
-      <ul id="albumList"></ul>
-    </section>
-
-    <section class="settings">
-      <h2>Settings</h2>
-      <label class="switch"><input type="checkbox" id="soundToggle"><span>Sound when a timer ends</span></label>
-      <label class="switch" id="notifyRow"><input type="checkbox" id="notifyToggle"><span>Desktop alert when a timer ends</span></label>
-      <fieldset class="lengths goal-pick">
-        <legend>Theme</legend>
-        <div class="chips" id="themeChips"></div>
-      </fieldset>
-      <fieldset class="lengths goal-pick">
-        <legend>Daily goal</legend>
-        <div class="chips" id="goalChips"></div>
-      </fieldset>
-      <fieldset class="lengths goal-pick">
-        <legend>Long break, every 4th session</legend>
-        <div class="chips" id="longBreakChips"></div>
-      </fieldset>
-      <label class="switch"><input type="checkbox" id="holidayToggle"><span>Holiday looks on the pet</span></label>
-      <label class="switch" id="vibrateRow"><input type="checkbox" id="vibrateToggle"><span>Vibrate when a timer ends</span></label>
-      <label class="switch" id="awakeRow"><input type="checkbox" id="awakeToggle"><span>Keep the screen on during a timer</span></label>
-      <div class="backup-row">
-        <button class="secondary" id="backupBtn">Back up progress</button>
-        <button class="secondary" id="restoreBtn">Restore</button>
-        <button class="secondary" id="moveBtn">Move to another device</button>
-      </div>
-      <p class="hint" id="backupHint"></p>
-      <button class="secondary" id="installBtn" hidden>Install app</button>
-      <p class="hint" id="installHint" hidden></p>
-    </section>
-
-    <div class="tools">
-      <button class="link" id="renameBtn">Change names</button>
-      <button class="link" id="resetBtn">Start over</button>
+        <table class="sr-only">
+          <caption>Focus time each day this week</caption>
+          <thead><tr><th scope="col">Day</th><th scope="col">Focus time</th></tr></thead>
+          <tbody id="weekTable"></tbody>
+        </table>
+      </section>
+      <p class="next" id="next"></p>
+      <button class="link share-pet" id="cardOpen">Share a picture</button>
       <span class="keys-hint" id="keysHint">Keys: Space starts or stops, P pauses, L changes the length</span>
-      <span class="tag" id="testTag" hidden>Test mode: seconds, not saved</span>
+    </div>
+
+    <div class="tab-panel" role="tabpanel" id="panelCollection" aria-labelledby="tabCollection" hidden>
+      <section class="notes">
+        <h2 id="notesTitle">Notes</h2>
+        <ul id="notesList"></ul>
+        <div class="seal" id="sealLocked">
+          <div class="seal-head">
+            <span class="seal-badge" aria-hidden="true"></span>
+            <div><strong>Sealed certificate</strong><span id="sealHint"></span></div>
+          </div>
+          <div class="meter" id="sealMeter" role="progressbar" aria-label="Sessions toward the certificate" aria-valuemin="0"><span id="sealFill"></span></div>
+          <span class="seal-count" id="sealCount"></span>
+        </div>
+        <button class="seal seal-open" id="sealOpen" hidden>
+          <span class="seal-badge open" aria-hidden="true"></span>
+          <span><strong>Your certificate</strong><span>Unsealed! Tap to open it.</span></span>
+          <span class="new" id="sealNew">New</span>
+        </button>
+        <button class="secondary seal-next" id="sealNewPet" hidden>Raise a new pet</button>
+        <div class="notes-links">
+          <button class="link" id="invOpen">Invite a friend</button>
+          <button class="link" id="invPasteOpen">Paste a link</button>
+        </div>
+      </section>
+
+      <section class="stickers" aria-labelledby="stickersTitle">
+        <h2 id="stickersTitle">Stickers</h2>
+        <p class="hint">For the long run. They count every pet you raise, so they stay when a new egg arrives.</p>
+        <ul id="stickerList"></ul>
+        <button class="link" id="stickersMore" aria-controls="stickerList" aria-expanded="false"></button>
+      </section>
+
+      <section class="album" id="album" aria-labelledby="albumTitle" hidden>
+        <h2 id="albumTitle">Album</h2>
+        <ul id="albumList"></ul>
+      </section>
+    </div>
+
+    <div class="tab-panel settings" role="tabpanel" id="panelSettings" aria-labelledby="tabSettings" hidden>
+      <section class="set-group" aria-labelledby="setAlerts">
+        <h2 id="setAlerts">Alerts</h2>
+        <label class="switch"><input type="checkbox" id="soundToggle"><span>Sound when a timer ends</span></label>
+        <label class="switch" id="notifyRow"><input type="checkbox" id="notifyToggle"><span>Desktop alert when a timer ends</span></label>
+        <label class="switch" id="vibrateRow"><input type="checkbox" id="vibrateToggle"><span>Vibrate when a timer ends</span></label>
+        <label class="switch" id="awakeRow"><input type="checkbox" id="awakeToggle"><span>Keep the screen on during a timer</span></label>
+      </section>
+      <section class="set-group" aria-labelledby="setStudy">
+        <h2 id="setStudy">Study</h2>
+        <fieldset class="lengths goal-pick">
+          <legend>Daily goal</legend>
+          <div class="chips" id="goalChips"></div>
+        </fieldset>
+        <fieldset class="lengths goal-pick">
+          <legend>Long break, every 4th session</legend>
+          <div class="chips" id="longBreakChips"></div>
+        </fieldset>
+      </section>
+      <section class="set-group" aria-labelledby="setLook">
+        <h2 id="setLook">Look</h2>
+        <fieldset class="lengths goal-pick">
+          <legend>Theme</legend>
+          <div class="chips" id="themeChips"></div>
+        </fieldset>
+        <label class="switch"><input type="checkbox" id="holidayToggle"><span>Holiday looks on the pet</span></label>
+      </section>
+      <section class="set-group" aria-labelledby="setData">
+        <h2 id="setData">You and your data</h2>
+        <div class="backup-row">
+          <button class="secondary" id="backupBtn">Back up progress</button>
+          <button class="secondary" id="restoreBtn">Restore</button>
+          <button class="secondary" id="moveBtn">Move to another device</button>
+        </div>
+        <p class="hint" id="backupHint"></p>
+        <button class="secondary" id="installBtn" hidden>Install app</button>
+        <p class="hint" id="installHint" hidden></p>
+        <div class="tools">
+          <button class="link" id="renameBtn">Change names</button>
+          <button class="link danger" id="resetBtn">Start over</button>
+        </div>
+      </section>
     </div>
   </section>
 </main>
+
+<div class="minibar" id="miniBar" hidden>
+  <span class="mini-what" id="miniWhat"></span>
+  <span class="mini-time" id="miniTime"></span>
+  <button class="secondary" id="miniPause"></button>
+  <button class="primary" id="miniStop"></button>
+</div>
 <footer class="dedication-note">Dedicated to Haylee :)</footer>
 
 <dialog id="nameDlg" aria-labelledby="nameTitle">
