@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { NOTES, LENGTHS, DOG_NAMES, STICKERS, STICKER_HINTS } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, pauseFocus, resumeFocus, focusLeft, pauseLeft, PAUSE_MAX, THEMES, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, tryCatch, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, STAGE_TRAIT, newFeature, describeLook, startNewPet, lifetime, unlockStickers, unreadStickers, stickerProgress, canTreat, giveTreat, TREAT_MAX, MAX_HEARTS } from "./engine.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, pauseFocus, resumeFocus, focusLeft, pauseLeft, PAUSE_MAX, THEMES, BREAKS, LONG_BREAKS, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, tryCatch, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, STAGE_TRAIT, newFeature, describeLook, startNewPet, lifetime, unlockStickers, unreadStickers, stickerProgress, canTreat, giveTreat, TREAT_MAX, MAX_HEARTS } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS, TREAT_MS } from "./render.js";
 import { holidayAt, HOLIDAYS } from "./holidays.js";
@@ -279,6 +279,8 @@ function render() {
     $(lbl).classList.toggle("off", $(key).disabled);
   });
   document.querySelectorAll("#chips input").forEach(i => { i.disabled = !!state.active; i.checked = +i.value === state.length; });
+  document.querySelectorAll("#breakChips input").forEach(i => { i.checked = +i.value === state.breakLength; });
+  document.querySelectorAll("#longBreakChips input").forEach(i => { i.checked = +i.value === state.longBreak; });
 
   $("petName").textContent = nameOr();
   $("cardOpen").textContent = `Share a picture of ${nameOr()}`;
@@ -632,6 +634,25 @@ LENGTHS.forEach(n => {
   input.addEventListener("change", () => { state.length = n; save(); render(); });
   $("chips").appendChild(label);
 });
+
+// Break lengths. A new choice applies from the next break, so a break already running keeps its time.
+// They look like the session chips ("15 min"), so screen readers get a fuller name ("15-minute break").
+function breakChip(row, name, n, aria, text, set) {
+  const label = document.createElement("label"), input = document.createElement("input"), span = document.createElement("span");
+  input.type = "radio"; input.name = name; input.value = n;
+  input.setAttribute("aria-label", aria);
+  span.textContent = text;
+  label.append(input, span);
+  input.addEventListener("change", () => {
+    set(n); save();
+    if (state.onBreak) say("Got it. The new length starts with your next break.");
+    render();
+  });
+  $(row).appendChild(label);
+}
+BREAKS.forEach(n => breakChip("breakChips", "brk", n, `${n}-minute break`, `${n} min`, v => { state.breakLength = v; }));
+LONG_BREAKS.forEach(n => breakChip("longBreakChips", "longBrk", n, n ? `${n}-minute long break` : "No long break",
+  n ? `${n} min` : "Off", v => { state.longBreak = v; }));
 
 /* ---------- Daily goal ---------- */
 function renderGoal(now) {

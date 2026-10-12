@@ -6,8 +6,8 @@ export const SAVE_VERSION = 4;
 export const USER_NAME_MAX = 24;
 export const HEART_MS = 12 * 3600e3;   // one heart fades every 12 hours
 export const MAX_HEARTS = 4;
-export const SHORT_BREAK = 5;
-export const LONG_BREAK = 15;
+export const BREAKS = [5, 10, 15];         // break lengths to pick from, in minutes
+export const LONG_BREAKS = [0, 15, 20, 30];  // the long break's length; 0 turns it off
 export const LONG_EVERY = 4;           // every 4th session earns a long break
 export const REST_EVERY = 7;           // every 7 days in a row earns a rest day...
 export const MAX_REST = 2;             // ...and up to 2 can be saved
@@ -54,7 +54,7 @@ export function createState(now, random = Math.random) {
     treats: 0, treatsGiven: 0,      // earned by meeting the daily goal (see Treats)
     stickers: {},                   // lifetime milestones across every pet (see Stickers)
     userName: "", certSeen: false,     // userName: the person, used across the app and on the certificate
-    length: 25, active: null, onBreak: null,
+    length: 25, breakLength: 5, longBreak: 15, active: null, onBreak: null,
     notes: {},
     invite: null,          // extras from the person who invited them (see Invites below)
     album: [],             // grown pets that moved on (see Album below)
@@ -92,6 +92,8 @@ export function migrate(raw, now) {
   if (raw.daySessions && typeof raw.daySessions === "object")
     for (const [k, v] of Object.entries(raw.daySessions)) if (Number.isInteger(v) && v > 0) s.daySessions[k] = v;
   s.bestCatches = Number.isInteger(raw.bestCatches) && raw.bestCatches > 0 ? raw.bestCatches : 0;
+  if (!BREAKS.includes(s.breakLength)) s.breakLength = 5;         // saves from before break choices get the old lengths
+  if (!LONG_BREAKS.includes(s.longBreak)) s.longBreak = 15;
   s.treats = Number.isInteger(raw.treats) ? Math.max(0, Math.min(TREAT_MAX, raw.treats)) : 0;
   s.treatsGiven = Number.isInteger(raw.treatsGiven) && raw.treatsGiven > 0 ? raw.treatsGiven : 0;
   s.stickers = {};
@@ -224,8 +226,10 @@ export function isPuppy(s, dogNames) {
   return dogNames.includes(s.name.trim().toLowerCase());
 }
 export const accessory = s => (s.invite && s.invite.accessory) || null;
-export function breakLength(sessions) {
-  return sessions % LONG_EVERY === 0 ? LONG_BREAK : SHORT_BREAK;
+// The break after the session just finished: the chosen length, or the long
+// break after every 4th session (unless it's turned off).
+export function breakLength(s) {
+  return s.longBreak && s.sessions % LONG_EVERY === 0 ? s.longBreak : s.breakLength;
 }
 
 /* ---------- Actions ---------- */
@@ -279,7 +283,7 @@ export function completeFocus(s, notesList) {
   s.lastStudyAt = t;
   s.bestStreak = Math.max(s.bestStreak, s.streak);
   if (!s.firstStudyAt) s.firstStudyAt = a.startedAt;
-  const breakMinutes = breakLength(s.sessions);
+  const breakMinutes = breakLength(s);
   s.onBreak = { minutes: breakMinutes, endAt: t + breakMinutes * (a.unitMs || 60000) };
   const after = stageIndex(s);
   if (after === STAGES.length - 1 && !s.grownAt) s.grownAt = t;

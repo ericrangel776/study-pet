@@ -932,3 +932,33 @@ test.describe("stickers", () => {
     await expect(page.locator("button.sticker", { hasText: "50 sessions" })).toContainText("New");
   });
 });
+
+test.describe("break lengths", () => {
+  test("a chosen break length is used and remembered", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await expect(page.getByRole("radio", { name: "5-minute break", exact: true })).toBeChecked();
+    await page.getByRole("radio", { name: "10-minute break" }).check();
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+    await expect(page.locator("#msg")).toContainText("Enjoy a 10-minute break.");
+    await expect(page.locator("#big")).toHaveText(/^(10:00|09:5\d)$/);
+    await page.getByRole("radio", { name: "15-minute break" }).check();
+    await expect(page.locator("#msg")).toHaveText("Got it. The new length starts with your next break.");
+    await expect(page.locator("#big")).toHaveText(/^09:\d\d$/);                 // this break keeps its time
+    await page.reload();
+    await expect(page.getByRole("radio", { name: "15-minute break" })).toBeChecked();
+    expect((await saved(page)).breakLength).toBe(15);
+  });
+
+  test("the long break can be changed or turned off", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 11 }) });                   // the next session is the 12th
+    await expect(page.getByRole("radio", { name: "15-minute long break" })).toBeChecked();
+    await page.getByRole("radio", { name: "No long break" }).check();
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+    await expect(page.locator("#msg")).toContainText("Enjoy a 5-minute break.");
+    expect((await saved(page)).longBreak).toBe(0);
+  });
+});
