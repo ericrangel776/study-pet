@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as E from "../src/engine.js";
-import { NOTES, DOG_NAMES, STICKERS } from "../src/config.js";
+import { NOTES, DOG_NAMES, STICKERS, SHELLS } from "../src/config.js";
 
 // Run every test in a time zone with daylight saving, so date bugs show up.
 process.env.TZ = "America/Chicago";
@@ -627,7 +627,7 @@ test("stickers count every pet raised, unlock once, and stay with a new egg", ()
   assert.deepEqual(got.map(k => k.id), ["hours25"]);        // 1490 + 15 minutes across both pets
   assert.equal(E.unreadStickers(s, STICKERS), 1);
   assert.deepEqual(E.unlockStickers(s, at(2026, 10, 13), STICKERS), []);   // only once
-  assert.deepEqual(E.stickerProgress(s, STICKERS.find(k => k.id === "sessions50")), { have: 20, need: 50 });
+  assert.deepEqual(E.milestoneProgress(s, STICKERS.find(k => k.id === "sessions50")), { have: 20, need: 50 });
   s.bestStreak = 0;                                         // the album's best streak still counts
   s.album[0].bestStreak = 14;
   assert.deepEqual(E.unlockStickers(s, at(2026, 10, 13), STICKERS).map(k => k.id), ["streak14"]);
@@ -680,4 +680,26 @@ test("locked notes report how close they are, the way they're checked", () => {
   assert.deepEqual(E.noteProgress(s, note("hours5"), at(2026, 10, 2, 10)), { have: 4, need: 5, unit: "hours" });
   s.sessions = 40;
   assert.equal(E.noteProgress(s, note("grown"), at(2026, 10, 2, 10)).have, 20);   // never past the goal
+});
+
+test("shells open from the start or with a lifetime milestone, and stay earned", () => {
+  const s = E.createState(at(2026, 10, 1, 8));
+  const open = () => SHELLS.filter(k => E.shellOpen(s, k)).map(k => k.id);
+  assert.deepEqual(open(), ["classic", "glacier"]);
+  for (let d = 1; d <= 7; d++) finishSession(s, at(2026, 10, d, 9));
+  assert.deepEqual(E.unlockShells(s, at(2026, 10, 7, 10), SHELLS).map(k => k.id), ["sweet"]);   // a 7-day streak
+  assert.equal(E.unseenShells(s, SHELLS), 1);
+  assert.deepEqual(E.unlockShells(s, at(2026, 10, 7, 11), SHELLS), []);                          // only once
+  s.streak = 0; s.bestStreak = 0;
+  assert.ok(E.shellOpen(s, SHELLS.find(k => k.id === "sweet")));                                 // kept after the streak ends
+  s.grownAt = at(2026, 10, 20);
+  assert.deepEqual(E.unlockShells(s, at(2026, 10, 20), SHELLS).map(k => k.id), ["quest"]);       // a pet raised to grown-up
+});
+
+test("older saves start on the classic shell, and bad shell entries are dropped", () => {
+  const s = E.migrate({ sessions: 3, settings: { sound: true } }, 0);
+  assert.equal(s.settings.shell, "classic");
+  assert.deepEqual(s.shells, {});
+  const bad = E.migrate({ shells: { sweet: { at: 5 }, quest: "yes", x: { at: "soon" } } }, 0);
+  assert.deepEqual(bad.shells, { sweet: { at: 5, seen: false } });
 });
