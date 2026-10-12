@@ -1,6 +1,6 @@
 {
   "name": "study-pet",
-  "version": "0.5.0",
+  "version": "0.5.1",
   "description": "A virtual pet that grows when you finish focused study sessions.",
   "type": "module",
   "private": true,
