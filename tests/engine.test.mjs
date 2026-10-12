@@ -668,3 +668,16 @@ test("saves from before break choices keep the old 5 and 15 minutes, and odd val
   assert.deepEqual([s.breakLength, s.longBreak], [5, 15]);
   assert.equal(E.migrate({ longBreak: 0 }, 0).longBreak, 0);       // off stays off
 });
+
+test("locked notes report how close they are, the way they're checked", () => {
+  const s = E.createState(at(2026, 10, 1, 8));
+  const note = id => NOTES.find(n => n.id === id);
+  finishSession(s, at(2026, 10, 1, 9)); finishSession(s, at(2026, 10, 2, 9));
+  assert.deepEqual(E.noteProgress(s, note("five"), at(2026, 10, 2, 10)), { have: 2, need: 5, unit: "sessions" });
+  assert.deepEqual(E.noteProgress(s, note("streak7"), at(2026, 10, 2, 10)), { have: 2, need: 7, unit: "days" });
+  assert.deepEqual(E.noteProgress(s, note("streak7"), at(2026, 10, 5, 10)), { have: 0, need: 7, unit: "days" });   // the streak ended
+  s.minutes = 299;
+  assert.deepEqual(E.noteProgress(s, note("hours5"), at(2026, 10, 2, 10)), { have: 4, need: 5, unit: "hours" });
+  s.sessions = 40;
+  assert.equal(E.noteProgress(s, note("grown"), at(2026, 10, 2, 10)).have, 20);   // never past the goal
+});

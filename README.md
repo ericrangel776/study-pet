@@ -65,9 +65,13 @@ After the first visit, the app opens without an internet connection.
 
 ## Tips
 
+- The panel beside the pet has three tabs: **Today** (timer lengths, stats, goal, treats, the week), **Collection**
+  (notes, the certificate, stickers, the Album; a badge counts what's new) and **Settings**. The pet's messages show
+  in a bubble under the device. On a phone, scrolling the device away during a session or break brings up a bar
+  with the time and the Pause and Stop buttons.
 - Press **T** in the app to switch to test mode, where sessions last seconds instead of minutes. Nothing done in test mode is saved, and pressing **T** again returns to your real progress.
   In test mode, **H** steps through the holiday looks.
-- **Invite a friend** (under Notes, and on the certificate) makes a link that sends someone their own pet with
+- **Invite a friend** (in Collection, and on the certificate) makes a link that sends someone their own pet with
   extras: a welcome message, a P.S. under any milestone note, a message sealed in their certificate, the puppy look,
   and an accessory (bow, flower or party hat). It all rides after the `#` in the link, which browsers never send to
   a server, so nothing personal lives in this code. On iPhone, links open in Safari, which keeps separate data from the

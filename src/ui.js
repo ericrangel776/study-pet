@@ -1,7 +1,7 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
 import { NOTES, LENGTHS, DOG_NAMES, STICKERS, STICKER_HINTS } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, pauseFocus, resumeFocus, focusLeft, pauseLeft, PAUSE_MAX, THEMES, BREAKS, LONG_BREAKS, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, tryCatch, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, STAGE_TRAIT, newFeature, describeLook, startNewPet, lifetime, unlockStickers, unreadStickers, stickerProgress, canTreat, giveTreat, TREAT_MAX, MAX_HEARTS } from "./engine.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, pauseFocus, resumeFocus, focusLeft, pauseLeft, PAUSE_MAX, THEMES, BREAKS, LONG_BREAKS, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, tryCatch, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, STAGE_TRAIT, newFeature, describeLook, startNewPet, lifetime, unlockStickers, unreadStickers, stickerProgress, canTreat, giveTreat, TREAT_MAX, MAX_HEARTS, noteProgress } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
 import { draw, HATCH_MS, TREAT_MS } from "./render.js";
 import { holidayAt, HOLIDAYS } from "./holidays.js";
@@ -81,7 +81,7 @@ function handleEvent(ev) {
     else if (ev.grewTo) {
       const why = ev.growReason && !(isPuppy(state, DOG_NAMES) && STAGE_TRAIT[ev.grewTo] === "ears") ? `, ${ev.growReason}` : "";   // puppies keep floppy ears
       growAt = Date.now(); text = `${nameOr()} grew into a ${STAGES[ev.grewTo].name}${isNew ? ` and has ${isNew}${why}` : ""}!`;
-      if (ev.grewTo === STAGES.length - 1) text += " Your certificate is unsealed. Find it under Notes.";
+      if (ev.grewTo === STAGES.length - 1) text += " Your certificate is unsealed. Find it in Collection.";
     }
     else text = `Session done. ${nameOr()} had a snack.`;
     if (ev.notes.length) text += ` You unlocked ${ev.notes.length === 1 ? "a note" : ev.notes.length + " notes"}.`;
@@ -151,7 +151,7 @@ function renderIcons(m, unread, now) {
 
 /* ---------- Rendering ---------- */
 function renderNotes() {
-  const sig = JSON.stringify([state.notes, state.invite, state.name]);
+  const sig = JSON.stringify([state.notes, state.invite, state.name, state.sessions, state.minutes, streakNow(state, Date.now())]);
   if (sig === notesSig) return;      // only rebuild when notes change, so buttons keep focus
   notesSig = sig;
   $("notesTitle").textContent = `Notes from ${nameOr()}`;
@@ -169,14 +169,18 @@ function renderNotes() {
       b.addEventListener("click", () => openNote(n));
       li.appendChild(b);
     } else {
-      const s = document.createElement("span");
+      const s = document.createElement("span"), what = document.createElement("span"), prog = document.createElement("span");
       s.className = "locked";
-      s.textContent = `Locked: ${n.hint.toLowerCase()}`;
+      what.textContent = `Locked: ${n.hint.toLowerCase()}`;
       if (notePS(state, n)) {   // a teaser: something from the inviter waits here
         const tag = document.createElement("span");
         tag.className = "ps-tag"; tag.textContent = `P.S. from ${state.invite.from}`;
-        s.appendChild(tag);
+        what.appendChild(tag);
       }
+      const p = noteProgress(state, n, Date.now());
+      prog.className = "note-progress";
+      prog.textContent = `${p.have} of ${p.need} ${p.unit}`;
+      s.append(what, prog);
       li.appendChild(s);
     }
     ul.appendChild(li);
@@ -184,14 +188,25 @@ function renderNotes() {
 }
 
 // Locked stickers show what they ask for and how close they are; earned ones open like notes.
-let stickersSig = "";
+// Until "Show all" is pressed, only the earned ones and the few closest to unlocking show.
+const STICKERS_NEXT = 3;
+let stickersSig = "", stickersAll = false;
+function shownStickers() {
+  if (stickersAll) return STICKERS;
+  const ratio = k => { const p = stickerProgress(state, k); return p.have / p.need; };
+  const next = STICKERS.filter(k => !state.stickers[k.id]).sort((a, b) => ratio(b) - ratio(a)).slice(0, STICKERS_NEXT);
+  return STICKERS.filter(k => state.stickers[k.id] || next.includes(k));
+}
 function renderStickers() {
-  const sig = JSON.stringify([state.stickers, lifetime(state)]);
+  const sig = JSON.stringify([state.stickers, lifetime(state), stickersAll]);
   if (sig === stickersSig) return;
   stickersSig = sig;
-  const ul = $("stickerList");
+  const ul = $("stickerList"), shown = shownStickers();
   ul.innerHTML = "";
-  STICKERS.forEach(k => {
+  $("stickersMore").hidden = !stickersAll && shown.length === STICKERS.length;
+  $("stickersMore").textContent = stickersAll ? "Show fewer" : `Show all ${STICKERS.length} stickers`;
+  $("stickersMore").setAttribute("aria-expanded", stickersAll);
+  shown.forEach(k => {
     const li = document.createElement("li"), got = state.stickers[k.id];
     const el = document.createElement(got ? "button" : "div");
     el.className = "sticker" + (got ? "" : " locked");
@@ -214,6 +229,7 @@ function renderStickers() {
     ul.appendChild(li);
   });
 }
+$("stickersMore").addEventListener("click", () => { stickersAll = !stickersAll; render(); });
 function openSticker(k) {
   $("noteTitle").textContent = `A sticker from ${nameOr()}: ${k.label}`;
   $("noteText").textContent = k.text;
@@ -245,7 +261,7 @@ function render() {
   const now = Date.now(), m = mood(state, now), st = stageIndex(state);
   const unread = unreadNotes(state, NOTES) + unreadStickers(state, STICKERS);
   const holiday = holidayNow(now), eating = st > 0 && now - treatAt < TREAT_MS;
-  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, catchAt, treatAt, rm: RM, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state), holiday });
+  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, treats: state.treats, hatchAt, growAt, patAt, catchAt, treatAt, rm: RM, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state), holiday });
   if (holiday) device.dataset.holiday = holiday.id;   // Halloween dims the LCD (styles.css)
   else delete device.dataset.holiday;
   canvas.setAttribute("aria-label", `${nameOr()}, ${STAGES[st].name}, ${MOOD_TEXT[m].toLowerCase()}${holiday && st > 0 ? `, dressed up for ${holiday.name}` : ""}${unread ? ", something new waiting" : ""}`);
@@ -283,12 +299,14 @@ function render() {
   document.querySelectorAll("#longBreakChips input").forEach(i => { i.checked = +i.value === state.longBreak; });
 
   $("petName").textContent = nameOr();
+  $("lead").hidden = lifetime(state).sessions >= LEAD_UNTIL;   // the intro is for the first few sessions
   $("cardOpen").textContent = `Share a picture of ${nameOr()}`;
   const inv = state.invite;
   $("dedication").textContent = inv ? (inv.to ? `For ${inv.to}, from ${inv.from}` : `Invited by ${inv.from}`) : "";
   $("dedication").hidden = !inv;
   $("stStreak").textContent = streakNow(state, now);
-  $("stRest").textContent = state.restDays ? `${state.restDays} rest ${state.restDays === 1 ? "day" : "days"} saved` : "";
+  $("stRest").textContent = state.restDays ? `+${state.restDays} rest ${state.restDays === 1 ? "day" : "days"}` : "";
+  $("stRest").title = state.restDays ? "Saved rest days cover a day you miss" : "";
   $("stRest").hidden = !state.restDays;
   renderGoal(now);
   const total = lifetime(state);   // across every pet raised
@@ -311,7 +329,59 @@ function render() {
   renderWeek(now);
   renderSeal();
   renderAlbum();
+  renderBadge();
+  renderMiniBar(now);
 }
+
+/* ---------- Tabs ---------- */
+// Today, Collection and Settings. The app always opens on Today.
+const LEAD_UNTIL = 3;
+const TABS = ["tabToday", "tabCollection", "tabSettings"];
+function selectTab(id, focus) {
+  TABS.forEach(t => {
+    const on = t === id;
+    $(t).setAttribute("aria-selected", on);
+    $(t).tabIndex = on ? 0 : -1;
+    $($(t).getAttribute("aria-controls")).hidden = !on;
+  });
+  if (focus) $(id).focus();
+}
+TABS.forEach((t, i) => {
+  $(t).addEventListener("click", () => selectTab(t));
+  $(t).addEventListener("keydown", e => {   // arrow keys move between tabs, as screen reader users expect
+    const to = { ArrowRight: i + 1, ArrowLeft: i - 1, Home: 0, End: TABS.length - 1 }[e.key];
+    if (to === undefined) return;
+    e.preventDefault();
+    selectTab(TABS[(to + TABS.length) % TABS.length], true);
+  });
+});
+// The Collection tab counts what's new inside it: notes, stickers and an unsealed certificate.
+function renderBadge() {
+  const n = unreadNotes(state, NOTES) + unreadStickers(state, STICKERS) + (state.grownAt && !state.certSeen ? 1 : 0);
+  $("collectionBadge").hidden = !n;
+  $("collectionBadge").innerHTML = n ? `${n}<span class="sr-only"> new</span>` : "";
+}
+
+/* ---------- Timer bar ---------- */
+// When the device scrolls out of view during a session or break (mostly on
+// phones), a bar at the bottom keeps the time and the device's two timer keys in reach.
+// The device counts as out of view once its buttons have scrolled off the screen.
+const deviceInView = () => { const r = $("keyLength").getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
+function renderMiniBar(now) {
+  const on = !!(state.active || state.onBreak) && !deviceInView();
+  $("miniBar").hidden = !on;
+  document.body.classList.toggle("has-minibar", on);   // room at the bottom so the bar never covers the page
+  if (!on) return;
+  const a = state.active;
+  $("miniWhat").textContent = a ? (a.pausedAt ? "Paused" : "Focus") : "Break";
+  $("miniTime").textContent = a ? fmt(focusLeft(state, now)) : fmt(state.onBreak.endAt - now);
+  $("miniPause").hidden = !a;
+  $("miniPause").textContent = $("lengthLbl").textContent;
+  $("miniPause").disabled = $("keyLength").disabled;
+  $("miniStop").textContent = a ? (now < stopArmed ? "Tap again to stop" : "Stop") : "End break";
+}
+$("miniPause").addEventListener("click", () => $("keyLength").click());
+$("miniStop").addEventListener("click", () => $("keyFocus").click());
 
 /* ---------- Certificate ---------- */
 // Sealed card with progress until the pet is fully grown; then a button that opens it.
@@ -489,7 +559,8 @@ function renderWeek(now) {
     const long = today ? "Today" : new Date(d.time).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 
     const day = document.createElement("div");
-    day.className = "week-day" + (today ? " today" : "");
+    const met = state.settings.goal && d.sessions >= state.settings.goal;
+    day.className = "week-day" + (today ? " today" : "") + (met ? " met" : "");
     day.dataset.tip = `${long}: ${d.minutes ? fmtMinutes(d.minutes) : "no focus time"}${state.settings.goal && d.sessions >= state.settings.goal ? ", goal met" : ""}`;
     const col = document.createElement("div");
     col.className = "week-col";
@@ -1034,6 +1105,7 @@ function tick() {
   keepAwake(state.settings.awake && !!(state.active || state.onBreak));
   render();
 }
+addEventListener("scroll", () => renderMiniBar(Date.now()), { passive: true });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) stopFlash(); tick(); });
 
 unlockNotes(state, Date.now(), NOTES);
