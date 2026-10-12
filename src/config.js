@@ -49,6 +49,17 @@ export const STICKERS = [
 export const STICKER_HINTS = { sessions: "Finish {n} sessions in all", minutes: "Focus for {n} hours in all",
   streak: "Study {n} days in a row", pets: "Raise {n} pets to grown-up", treats: "Give {n} treats" };
 
+// Device shells (see Shells in engine.js). The look for each lives in styles.css
+// under [data-shell], and the screen colors in render.js. `dark`: the shell is
+// always dark, so the light and dark choice doesn't apply.
+export const SHELLS = [
+  { id: "classic", name: "Classic",    blurb: "The original purple egg" },
+  { id: "glacier", name: "Glacier",    blurb: "Clear plastic, circuits and all" },
+  { id: "sweet",   name: "Sweet shop", blurb: "A printed shell, pink with dots", need: { streak: 7 } },
+  { id: "quest",   name: "Card quest", blurb: "A pocket RPG handheld", need: { pets: 1 }, dark: true }
+];
+export const SHELL_HINTS = { streak: "Study {n} days in a row", pets: "Raise a pet to grown-up" };
+
 export const LENGTHS = [15, 25, 45, 60];
 
 // A little surprise: a pet given one of these names (any capitalization) hatches as a puppy.

@@ -1,9 +1,9 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
-import { NOTES, LENGTHS, DOG_NAMES, STICKERS, STICKER_HINTS } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, pauseFocus, resumeFocus, focusLeft, pauseLeft, PAUSE_MAX, THEMES, BREAKS, LONG_BREAKS, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, tryCatch, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, STAGE_TRAIT, newFeature, describeLook, startNewPet, lifetime, unlockStickers, unreadStickers, stickerProgress, canTreat, giveTreat, TREAT_MAX, MAX_HEARTS, noteProgress } from "./engine.js";
+import { NOTES, LENGTHS, DOG_NAMES, STICKERS, STICKER_HINTS, SHELLS, SHELL_HINTS } from "./config.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, pauseFocus, resumeFocus, focusLeft, pauseLeft, PAUSE_MAX, THEMES, BREAKS, LONG_BREAKS, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, tryCatch, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, STAGE_TRAIT, newFeature, describeLook, startNewPet, lifetime, unlockStickers, unreadStickers, milestoneProgress, canTreat, giveTreat, TREAT_MAX, MAX_HEARTS, noteProgress, unlockShells, unseenShells, shellOpen } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
-import { draw, HATCH_MS, TREAT_MS } from "./render.js";
+import { draw, HATCH_MS, TREAT_MS, setPalette } from "./render.js";
 import { holidayAt, HOLIDAYS } from "./holidays.js";
 import { drawCard } from "./card.js";
 import { qrEncode, QR_MAX_BYTES } from "./qr.js";
@@ -43,6 +43,8 @@ function holidayNow(now) {
   if (testMode && previewHoliday >= 0) return { ...HOLIDAYS[previewHoliday], day: 3 };
   return holidayAt(now);
 }
+// A newly earned shell, in a sentence, or "".
+const shellText = got => got.map(k => ` New shell: ${k.name}! Try it in Settings.`).join("");
 // A new sticker (or several), in a sentence, or "".
 function stickerText(got) {
   if (!got.length) return "";
@@ -90,7 +92,7 @@ function handleEvent(ev) {
         + (ev.treatEarned ? " You earned a treat." : ` The treat jar is full (${TREAT_MAX}), so give one soon.`);
       if (!ev.grewTo) growAt = Date.now();
     }
-    text += stickerText(unlockStickers(state, Date.now(), STICKERS));
+    text += stickerText(unlockStickers(state, Date.now(), STICKERS)) + shellText(unlockShells(state, Date.now(), SHELLS));
     if (ev.restUsed) text += ` A rest day kept your ${state.streak}-day streak going.`;
     if (ev.restEarned) text += ` ${REST_EVERY} days in a row earned you a rest day for a day you miss.`;
     if (!ev.breakSkipped) text += ` Enjoy a ${ev.breakMinutes}-minute break.`;
@@ -193,7 +195,7 @@ const STICKERS_NEXT = 3;
 let stickersSig = "", stickersAll = false;
 function shownStickers() {
   if (stickersAll) return STICKERS;
-  const ratio = k => { const p = stickerProgress(state, k); return p.have / p.need; };
+  const ratio = k => { const p = milestoneProgress(state, k); return p.have / p.need; };
   const next = STICKERS.filter(k => !state.stickers[k.id]).sort((a, b) => ratio(b) - ratio(a)).slice(0, STICKERS_NEXT);
   return STICKERS.filter(k => state.stickers[k.id] || next.includes(k));
 }
@@ -218,7 +220,7 @@ function renderStickers() {
       if (!got.read) { const nb = document.createElement("span"); nb.className = "new"; nb.textContent = "New"; el.append(nb); }
       el.addEventListener("click", () => openSticker(k));
     } else {
-      const [key] = Object.keys(k.need), p = stickerProgress(state, k), hours = key === "minutes";
+      const [key] = Object.keys(k.need), p = milestoneProgress(state, k), hours = key === "minutes";
       label.textContent = STICKER_HINTS[key].replace("{n}", hours ? p.need / 60 : p.need);
       const prog = document.createElement("span");
       prog.className = "sticker-progress";
@@ -330,6 +332,7 @@ function render() {
   renderSeal();
   renderAlbum();
   renderBadge();
+  renderShells();
   renderMiniBar(now);
 }
 
@@ -337,6 +340,7 @@ function render() {
 // Today, Collection and Settings. The app always opens on Today.
 const LEAD_UNTIL = 3;
 const TABS = ["tabToday", "tabCollection", "tabSettings"];
+let lastTab = "tabToday";
 function selectTab(id, focus) {
   TABS.forEach(t => {
     const on = t === id;
@@ -344,6 +348,8 @@ function selectTab(id, focus) {
     $(t).tabIndex = on ? 0 : -1;
     $($(t).getAttribute("aria-controls")).hidden = !on;
   });
+  if (lastTab === "tabSettings" && id !== "tabSettings") markShellsSeen();
+  lastTab = id;
   if (focus) $(id).focus();
 }
 TABS.forEach((t, i) => {
@@ -360,6 +366,9 @@ function renderBadge() {
   const n = unreadNotes(state, NOTES) + unreadStickers(state, STICKERS) + (state.grownAt && !state.certSeen ? 1 : 0);
   $("collectionBadge").hidden = !n;
   $("collectionBadge").innerHTML = n ? `${n}<span class="sr-only"> new</span>` : "";
+  const shells = unseenShells(state, SHELLS);
+  $("settingsBadge").hidden = !shells;
+  $("settingsBadge").innerHTML = shells ? `${shells}<span class="sr-only"> new</span>` : "";
 }
 
 /* ---------- Timer bar ---------- */
@@ -452,7 +461,7 @@ async function openCard() {
   const canvas = await drawCard(document.createElement("canvas"), {
     petName: nameOr(), userName: state.userName || "you", stageName: st === 0 ? "Still an egg" : `A ${STAGES[st].name}`,
     sessions: state.sessions, focus: fmtMinutes(state.minutes), streak: streakNow(state, now),
-    url: (location.host + location.pathname).replace(/\/$/, ""),
+    shell: shellNow().id, url: (location.host + location.pathname).replace(/\/$/, ""),
     pet: { now: 1300, mood: st === 0 ? "egg" : "happy", stage: st, hearts: 0, unread: 0, hatchAt: -1e12, growAt: -1e12, patAt: -1e12,
            rm: true, portrait: true, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state), holiday: holidayNow(now) }
   });
@@ -787,10 +796,59 @@ $("vibrateToggle").addEventListener("change", e => { state.settings.vibrate = e.
 $("holidayToggle").addEventListener("change", e => { state.settings.holidays = e.target.checked; save(); render(); });
 
 // Theme: follow the device, or always light or dark.
+// The shell decides the device, the screen colors and the page style; light and
+// dark apply to the shells that have both.
 function applyTheme() {
-  const t = state.settings.theme;
+  const t = state.settings.theme, shell = shellNow();
   if (t === "auto") delete document.documentElement.dataset.theme;
   else document.documentElement.dataset.theme = t;
+  document.documentElement.dataset.shell = shell.id;
+  setPalette(shell.id);
+  document.querySelectorAll("#themeChips input").forEach(i => { i.disabled = !!shell.dark; });
+  $("themeHint").hidden = !shell.dark;
+  $("themeHint").textContent = shell.dark ? `${shell.name} is always dark.` : "";
+}
+// The chosen shell, if it's been earned (test mode can try any of them).
+function shellNow() {
+  const k = SHELLS.find(x => x.id === state.settings.shell);
+  return k && (testMode || shellOpen(state, k)) ? k : SHELLS[0];
+}
+
+// Shell picker: a small device in each shell's colors. Locked shells say how to earn them.
+let shellsSig = "";
+function renderShells() {
+  const sig = JSON.stringify([state.shells, state.settings.shell, testMode, lifetime(state)]);
+  if (sig === shellsSig) return;
+  shellsSig = sig;
+  const box = $("shellPicker"), current = shellNow().id;
+  box.innerHTML = "";
+  SHELLS.forEach(k => {
+    const open = testMode || shellOpen(state, k), label = document.createElement("label"), input = document.createElement("input");
+    label.className = "shell-pick" + (open ? "" : " shell-locked");
+    input.type = "radio"; input.name = "shell"; input.value = k.id; input.checked = k.id === current; input.disabled = !open;
+    input.addEventListener("change", () => {
+      state.settings.shell = k.id;
+      if (state.shells[k.id]) state.shells[k.id].seen = true;
+      save(); applyTheme(); render();
+    });
+    const pic = document.createElement("span"), name = document.createElement("strong"), about = document.createElement("span");
+    pic.className = "shell-mini"; pic.dataset.shellMini = k.id; pic.setAttribute("aria-hidden", "true");
+    name.textContent = k.name;
+    if (open) about.textContent = k.blurb;
+    else {
+      const [key] = Object.keys(k.need), p = milestoneProgress(state, k);
+      about.textContent = `Locked: ${SHELL_HINTS[key].replace("{n}", p.need).toLowerCase()} (${p.have} of ${p.need})`;
+    }
+    label.append(input, pic, name, about);
+    if (state.shells[k.id] && !state.shells[k.id].seen) { const nb = document.createElement("span"); nb.className = "new"; nb.textContent = "New"; label.append(nb); }
+    box.appendChild(label);
+  });
+}
+// Newly earned shells stay marked New until you've looked at Settings and moved on.
+function markShellsSeen() {
+  let changed = false;
+  SHELLS.forEach(k => { const got = state.shells[k.id]; if (got && !got.seen) { got.seen = true; changed = true; } });
+  if (changed) { save(); render(); }
 }
 THEMES.forEach(t => {
   const label = document.createElement("label"), input = document.createElement("input"), span = document.createElement("span");
@@ -1110,6 +1168,8 @@ document.addEventListener("visibilitychange", () => { if (!document.hidden) stop
 
 unlockNotes(state, Date.now(), NOTES);
 unlockStickers(state, Date.now(), STICKERS);   // older saves get the stickers they've already earned
+unlockShells(state, Date.now(), SHELLS);
+applyTheme();
 save();
 protectProgress();
 setInterval(tick, 100);
