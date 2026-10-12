@@ -7,8 +7,9 @@ It's a progressive web app: it runs in the browser, can be installed like an app
 
 ```
 src/
-  config.js    Milestones, the pet's own notes, session lengths, and the puppy names
-  engine.js    Pet rules: hearts, stages, streaks, breaks, notes, backups. No screen code.
+  config.js    Milestones, the pet's own notes, stickers, session lengths, and the puppy names
+  engine.js    Pet rules: hearts, stages, streaks, breaks, notes, stickers, treats, backups. No screen code.
+  holidays.js  Which holiday (if any) is on today
   storage.js   Saving and loading behind a load()/save() interface
   render.js    Draws the LCD screen on a canvas
   card.js      Draws the shareable 1080x1350 picture of the pet
@@ -19,6 +20,7 @@ src/
   ui.js        Connects everything to the page
 tests/
   engine.test.mjs   Tests for the engine
+  holidays.test.mjs Tests for the holiday dates
   move.test.mjs     Tests for move links and QR codes (read back with jsQR)
 e2e/
   app.spec.mjs      Browser tests for the built app (Playwright)
@@ -36,7 +38,7 @@ build.mjs    Builds the installable app into dist/
 
 Requires Node.js 20 or newer.
 
-- `npm test` runs the engine tests.
+- `npm test` runs the engine and holiday tests.
 - `npm run test:browser` builds the app and runs the browser tests in `e2e/` (desktop and phone sizes).
   The first time, run `npm install` and then `npx playwright install chromium`.
 - `npm run dev` serves the source files locally. Open the address it prints.
@@ -64,6 +66,7 @@ After the first visit, the app opens without an internet connection.
 ## Tips
 
 - Press **T** in the app to switch to test mode, where sessions last seconds instead of minutes. Nothing done in test mode is saved, and pressing **T** again returns to your real progress.
+  In test mode, **H** steps through the holiday looks.
 - **Invite a friend** (under Notes, and on the certificate) makes a link that sends someone their own pet with
   extras: a welcome message, a P.S. under any milestone note, a message sealed in their certificate, the puppy look,
   and an accessory (bow, flower or party hat). It all rides after the `#` in the link, which browsers never send to
@@ -74,6 +77,13 @@ After the first visit, the app opens without an internet connection.
   Study habits can decide the later traits as they arrive: long or quick sessions shape the ears, a 5-day
   streak gives a fluffy tail, and a 7-day streak or 10 hours of focus decides the topper (`habitTrait`).
   A pet named Lila or Daisy is a puppy (`DOG_NAMES` in `src/config.js`).
+- The pet dresses up for New Year, Lunar New Year, Valentine's Day, St. Patrick's Day, Easter, the Fourth of July,
+  Halloween (the whole week, with a dimmer screen), Thanksgiving, Hanukkah (a menorah with the night's candles) and
+  Christmas. The dates are in `src/holidays.js`; Lunar New Year and Hanukkah come from tables (through 2035 and 2030),
+  so add years there as they get close. Settings can turn holiday looks off.
+- Meeting the daily goal earns a treat (up to 5 saved). Giving one adds a heart and plays a little snack on the screen.
+- Stickers are lifetime milestones (sessions, hours, best streak, pets grown, treats given). They count every pet in
+  the Album, so they keep coming after the certificate. The list is `STICKERS` in `src/config.js`.
 - The certificate unseals when the pet is fully grown (20 sessions) and can be printed or saved as a PDF.
   After that, **Raise a new pet** moves the grown pet into the Album (with its certificate) and brings a new egg.
 - **Move to another device** (Settings) shows a QR code; scanning it opens the app there and moves the pet

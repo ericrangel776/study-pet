@@ -64,6 +64,10 @@
       <div><dt>Focus time</dt><dd id="stTime">0m</dd></div>
     </dl>
     <p class="goal" id="goalLine" hidden><span class="goal-dots" id="goalDots" aria-hidden="true"></span><span id="goalText"></span></p>
+    <div class="treats" id="treatRow" hidden>
+      <button class="secondary" id="treatBtn">Give a treat</button>
+      <span class="treat-count" id="treatCount"></span>
+    </div>
     <section class="week" aria-labelledby="weekTitle">
       <div class="week-head"><h2 id="weekTitle">This week</h2><span class="week-total" id="weekTotal"></span></div>
       <div class="week-plot">
@@ -103,6 +107,12 @@
       </div>
     </section>
 
+    <section class="stickers" aria-labelledby="stickersTitle">
+      <h2 id="stickersTitle">Stickers</h2>
+      <p class="hint">For the long run. They count every pet you raise, so they stay when a new egg arrives.</p>
+      <ul id="stickerList"></ul>
+    </section>
+
     <section class="album" id="album" aria-labelledby="albumTitle" hidden>
       <h2 id="albumTitle">Album</h2>
       <ul id="albumList"></ul>
@@ -120,6 +130,7 @@
         <legend>Daily goal</legend>
         <div class="chips" id="goalChips"></div>
       </fieldset>
+      <label class="switch"><input type="checkbox" id="holidayToggle"><span>Holiday looks on the pet</span></label>
       <label class="switch" id="vibrateRow"><input type="checkbox" id="vibrateToggle"><span>Vibrate when a timer ends</span></label>
       <label class="switch" id="awakeRow"><input type="checkbox" id="awakeToggle"><span>Keep the screen on during a timer</span></label>
       <div class="backup-row">

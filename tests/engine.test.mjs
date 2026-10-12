@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import * as E from "../src/engine.js";
-import { NOTES, DOG_NAMES } from "../src/config.js";
+import { NOTES, DOG_NAMES, STICKERS } from "../src/config.js";
 
 // Run every test in a time zone with daylight saving, so date bugs show up.
 process.env.TZ = "America/Chicago";
@@ -399,7 +399,7 @@ test("a grown pet moves into the album and a new egg starts fresh", () => {
   assert.equal(s.userName, "Riley");                     // the person, streak and history stay
   assert.equal(s.streak, 10);
   assert.ok(Object.keys(s.days).length > 0);
-  assert.deepEqual(E.lifetime(s), { sessions: 20, minutes: 500 });
+  assert.deepEqual(E.lifetime(s), { sessions: 20, minutes: 500, bestStreak: 10, pets: 1, treats: 0 });
 });
 
 test("only a fully grown pet can move into the album", () => {
@@ -580,4 +580,70 @@ test("anything that isn't a backup is rejected", () => {
   for (const bad of ["", "hello", "{}", '{"app":"study-pet","data":{"sessions":"lots"}}', "[1,2,3]"]) {
     assert.throws(() => E.importBackup(bad, 0), /doesn't look like/);
   }
+});
+
+test("meeting the daily goal earns a treat, and the jar holds up to 5", () => {
+  const s = E.createState(at(2026, 10, 1, 8));
+  finishSession(s, at(2026, 10, 1, 9));
+  assert.equal(s.treats, 0);
+  const ev = finishSession(s, at(2026, 10, 1, 10));
+  assert.equal(ev.treatEarned, true);
+  assert.equal(s.treats, 1);
+  finishSession(s, at(2026, 10, 1, 11));
+  assert.equal(s.treats, 1);                                // once a day
+  for (let d = 2; d <= 8; d++) { finishSession(s, at(2026, 10, d, 9)); finishSession(s, at(2026, 10, d, 10)); }
+  assert.equal(s.treats, E.TREAT_MAX);
+  s.settings.goal = 0;
+  s.treats = 0;
+  finishSession(s, at(2026, 10, 9, 9)); finishSession(s, at(2026, 10, 9, 10));
+  assert.equal(s.treats, 0);                                // no goal, no treats
+});
+
+test("a treat adds a heart, for a hatched pet that isn't mid-session", () => {
+  const t = at(2026, 10, 1, 8), s = E.createState(t);
+  s.treats = 2;
+  assert.equal(E.giveTreat(s, t), false);                   // eggs don't eat
+  finishSession(s, at(2026, 10, 1, 9));
+  const later = at(2026, 10, 2, 22);                        // hearts have faded since
+  const before = E.heartsNow(s, later);
+  assert.equal(E.giveTreat(s, later), true);
+  assert.equal(E.heartsNow(s, later), before + 1);
+  assert.equal(s.treats, 1);
+  assert.equal(s.treatsGiven, 1);
+  E.startFocus(s, later, MIN);
+  assert.equal(E.giveTreat(s, later), false);               // not during a session
+  E.stopFocus(s);
+  assert.equal(E.giveTreat(s, later), true);
+  assert.equal(E.giveTreat(s, later), false);               // the jar is empty
+});
+
+test("stickers count every pet raised, unlock once, and stay with a new egg", () => {
+  const s = grownPet();
+  assert.deepEqual(E.unlockStickers(s, at(2026, 10, 11), STICKERS).map(k => k.id), []);
+  s.minutes = 1490;
+  E.startNewPet(s, "Bean", at(2026, 10, 11), NOTES);
+  s.minutes = 15;                                            // the new pet's first session
+  const got = E.unlockStickers(s, at(2026, 10, 12), STICKERS);
+  assert.deepEqual(got.map(k => k.id), ["hours25"]);        // 1490 + 15 minutes across both pets
+  assert.equal(E.unreadStickers(s, STICKERS), 1);
+  assert.deepEqual(E.unlockStickers(s, at(2026, 10, 13), STICKERS), []);   // only once
+  assert.deepEqual(E.stickerProgress(s, STICKERS.find(k => k.id === "sessions50")), { have: 20, need: 50 });
+  s.bestStreak = 0;                                         // the album's best streak still counts
+  s.album[0].bestStreak = 14;
+  assert.deepEqual(E.unlockStickers(s, at(2026, 10, 13), STICKERS).map(k => k.id), ["streak14"]);
+  s.sessions = 20; s.grownAt = at(2026, 10, 30);             // a second grown pet
+  assert.ok(E.unlockStickers(s, at(2026, 10, 30), STICKERS).some(k => k.id === "pets2"));
+});
+
+test("older saves get an empty treat jar and no stickers, and bad values are cleaned", () => {
+  const s = E.migrate({ version: 3, sessions: 4, minutes: 100, hearts: 2, heartsAt: 0, settings: { sound: true } }, 0);
+  assert.equal(s.version, E.SAVE_VERSION);
+  assert.equal(s.treats, 0);
+  assert.equal(s.treatsGiven, 0);
+  assert.deepEqual(s.stickers, {});
+  assert.equal(s.settings.holidays, true);
+  const bad = E.migrate({ treats: 99, treatsGiven: -3, stickers: { a: { at: 5, read: 1 }, b: "x", c: { at: "soon" } } }, 0);
+  assert.equal(bad.treats, E.TREAT_MAX);
+  assert.equal(bad.treatsGiven, 0);
+  assert.deepEqual(bad.stickers, { a: { at: 5, read: true } });
 });

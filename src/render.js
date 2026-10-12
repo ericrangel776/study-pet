@@ -158,11 +158,96 @@ function drawPet(st, o) {
   paintMarks(look.marks, mask, o.x, P.cy, P.rx, P.ry, o.dog);
   if (o.dog) drawDogEars(o.x, P.cy, P.rx, P.ry, st);
   else if (st >= 2 && look.ears === "antennae") { sprite(ANTENNA_L, o.x - 6, top - 3, INK); sprite(ANTENNA_R, o.x + 2, top - 3, INK); }
-  if (st === 4 && o.accessory !== "hat") { const t = TOPPERS[look.topper]; sprite2(t, o.x - Math.floor(t[0].length / 2), top - t.length); }
+  // A holiday hat sits where the topper goes; an invite's party hat stays on instead.
+  const hat = o.holiday && o.accessory !== "hat" ? HOLIDAY_HATS[o.holiday.id] : null;
+  if (st === 4 && o.accessory !== "hat" && !hat) { const t = TOPPERS[look.topper]; sprite2(t, o.x - Math.floor(t[0].length / 2), top - t.length); }
+  if (hat) hat.forEach(([rows, dx]) => sprite2(rows, o.x + dx, top - rows.length + 1));
   if (o.accessory) drawAccessory(o.accessory, o.x, P.cy, P.rx, P.ry);
   (o.dog ? drawDogFace : drawFace)(o.x, P.cy, P.rx, P.ry, o.face, o.blush);
   return P;
 }
+
+/* ---------- Holidays ---------- */
+// Each holiday (see holidays.js) can bring a hat, a prop standing at the left
+// of the ground, and something moving in the sky at the top left. They all stay
+// in the space the pet and the ball never use. Same "#" / "+" / "." as the gifts.
+const BOPPER = [".#.#.", "#+#+#", ".###.", "..#..", "..#..", "..#.."];
+const HOLIDAY_HATS = {   // a list of [sprite, x offset from the pet's center]
+  newyear:      [[ACCESSORY_SPRITES.hat, -2]],
+  christmas:    [[["....##...", "...#++#..", "..#+++#.#", ".#++++#.#", "#########", "#.#.#.#.#", "#########"], -4]],
+  valentine:    [[BOPPER, -7], [BOPPER, 2]],
+  stpatrick:    [[["..###..", "..#+#..", "###+###", "#+++++#", "###+###", "...#...", "..#...."], -3]],
+  july4:        [[["..#####..", "..#+#+#..", "..#####..", "..#+#+#..", "..#####..", "#########"], -4]],
+  halloween:    [[["....#....", "...##....", "...#+#...", "..#++#...", "..#+++#..", ".#+++++#.", "#########"], -4]],
+  thanksgiving: [[["..#####..", "..#+++#..", "..#+++#..", "..#####..", "..#+#+#..", "#########"], -4]]
+};
+const HOLIDAY_PROPS = {
+  christmas:    ["....#....", "...###...", "..#+++#..", "...#+#...", "..#+++#..", ".#+++++#.", "#########", "....#....", "...###..."],
+  lunarnewyear: ["...#...", ".#####.", "#+#+#+#", "#+#+#+#", "#+#+#+#", ".#####.", "...#...", "..#.#.."],
+  stpatrick:    [".#.#.#.", "#######", ".#+++#.", "#+++++#", "#+++++#", ".#####."],
+  easter:       ["..###..", ".#+++#.", "#.#.#.#", "#+++++#", "#.#.#.#", ".#+++#.", "..###.."],
+  halloween:    ["....#....", ".###.###.", "#+++++++#", "#+.+++.+#", "#+++++++#", "#+.+.+.+#", ".#######."],
+  thanksgiving: ["..#####..", ".#+.+.+#.", "#########", "#+++++++#", ".#######."]
+};
+const BURST = ["#...#...#", ".#.....#.", "...#.#...", "#.#...#.#", "...#.#...", ".#.....#.", "#...#...#"];
+const BAT = [["#.....#", "##...##", ".##.##.", "..###..", "...#..."], ["..#.#..", ".#####.", "##.#.##", "#.....#"]];
+
+// Hanukkah: a menorah with tonight's candles lit; the tall one in the middle lights the rest.
+function drawMenorah(nights, now, rm) {
+  const x0 = 1, base = GROUND;
+  for (let k = 0; k < 9; k++) {
+    const shamash = k === 4, lit = shamash || (k > 4 ? 9 - k : 8 - k) <= nights;   // one more each night, filling in from the right
+    const x = x0 + k, top = base - 5 - (shamash ? 1 : 0);
+    cx.fillStyle = lit ? INK : SPOT; cx.fillRect(x, top, 1, 3);   // the candles touch, so lit ones are dark
+    if (lit && (rm || (Math.floor(now / 300) + k) % 3)) { cx.fillStyle = INK; cx.fillRect(x, top - 1, 1, 1); }
+  }
+  cx.fillStyle = INK;
+  cx.fillRect(x0, base - 2, 9, 1); cx.fillRect(x0 + 4, base - 1, 1, 1); cx.fillRect(x0 + 2, base, 5, 1);
+}
+// Snow falls behind the pet, so it's drawn first.
+function drawSnow(now, rm) {
+  cx.fillStyle = GHOST;
+  for (let k = 0; k < 14; k++) {
+    const x = (k * 23 + 7) % W, speed = 1 + (k % 3);
+    const y = rm ? (k * 13) % H : Math.floor(now / 160 * speed / 3 + k * 17) % H;
+    cx.fillRect(x, y, 1, 1);
+  }
+}
+function drawHolidayBack(h, now, rm) {
+  if (h.id === "christmas") drawSnow(now, rm);
+}
+function drawHolidayFront(h, now, rm) {
+  const prop = HOLIDAY_PROPS[h.id];
+  if (prop) sprite2(prop, 1, GROUND - prop.length + 1);
+  if (h.id === "hanukkah") drawMenorah(Math.min(8, h.day + 1), now, rm);
+  if (h.id === "newyear" || h.id === "july4") {         // fireworks
+    const f = rm ? 1 : Math.floor(now / 400) % 4;
+    if (f === 1) sprite(BURST, 2, 10, INK);
+    if (f === 2) sprite(SPARK, 9, 15, INK);
+    if (f === 3) sprite(BURST, 5, 17, INK);
+    if (f === 0) sprite(SPARK, 4, 12, INK);
+  }
+  if (h.id === "halloween") {                           // a bat flapping in the corner
+    const f = rm ? 0 : Math.floor(now / 250) % 2, bob = rm ? 0 : Math.round(Math.sin(now / 700) * 2);
+    sprite(BAT[f], 3, 13 + bob, INK);
+  }
+  if (h.id === "valentine") {                           // hearts floating up
+    [0, 1].forEach(k => {
+      const t = rm ? 0.5 : ((now / 3000) + k / 2) % 1;
+      sprite(HEART, 3 + k * 5, Math.round(30 - t * 20), INK);
+    });
+  }
+}
+
+/* ---------- Treats ---------- */
+// A cookie held up to the mouth, eaten in three bites.
+export const TREAT_MS = 1800;
+const COOKIE = [
+  [".###.", "#+#+#", "#+++#", "#+#+#", ".###."],
+  [".##..", "#+#..", "#++#.", "#+#+#", ".###."],
+  ["#+#", ".##"],
+  []
+];
 
 /* ---------- The egg ---------- */
 const EGG = { rx: 8, ry: 10.5 };
@@ -202,17 +287,19 @@ function drawHatch(t, now, rm, dog, accessory, look) {
 }
 
 /* ---------- One frame ---------- */
-// v = { now, mood, stage, hearts, unread, hatchAt, growAt, patAt, catchAt, rm, dog, accessory, look, portrait }
+// v = { now, mood, stage, hearts, unread, hatchAt, growAt, patAt, catchAt, treatAt, rm, dog, accessory, look, holiday, portrait }
 export function draw(ctx, v) {
   cx = ctx;
-  const { now, mood: m, stage: st, rm } = v;
+  const { now, mood: m, stage: st, rm, holiday } = v;
   cx.clearRect(0, 0, W, H);
+  if (holiday) { drawHolidayBack(holiday, now, rm); drawHolidayFront(holiday, now, rm); }
   if (!v.portrait) for (let k = 0; k < 4; k++) sprite(HEART, 2 + k * 6, 2, k < v.hearts ? INK : GHOST);   // portrait: just the pet, for the certificate
   if (v.unread && !v.portrait && Math.floor(now / 500) % 2) sprite(ENVELOPE, 55, 2, INK);
 
   if (now - v.hatchAt < HATCH_MS) { drawHatch(now - v.hatchAt, now, rm, v.dog, v.accessory, v.look); return; }
 
-  const tp = now - v.patAt, patting = tp < PAT_MS, growing = now - v.growAt < GROW_MS;
+  const tt = now - (v.treatAt || -1e12), eating = st > 0 && tt < TREAT_MS;
+  const tp = now - v.patAt, patting = !eating && tp < PAT_MS, growing = now - v.growAt < GROW_MS;
   const beat = rm ? 0 : Math.floor(now / 600) % 2;
 
   if (st === 0) {
@@ -223,7 +310,10 @@ export function draw(ctx, v) {
   }
 
   let x = 32, ground = GROUND, squash = 0, face, blush = false;
-  if (patting || growing) {
+  const bite = Math.min(3, Math.floor(tt / (TREAT_MS / 4)));
+  if (eating) {
+    face = { eyes: "joy", mouth: bite < 3 && !rm && Math.floor(tt / 150) % 2 ? "open" : "small" }; blush = true;
+  } else if (patting || growing) {
     face = { eyes: "joy", mouth: "grin" }; blush = true;
     if (!rm) {
       if (patting && tp < 120) squash = 1;
@@ -245,8 +335,14 @@ export function draw(ctx, v) {
     if (m === "hungry" && !rm && (now % 3000) < 240) x += Math.floor(now / 60) % 2 ? 1 : -1;
   }
 
-  const P = drawPet(st, { x, ground, squash, face, blush, dog: v.dog, accessory: v.accessory, look: v.look });
+  const P = drawPet(st, { x, ground, squash, face, blush, dog: v.dog, accessory: v.accessory, look: v.look, holiday });
 
+  if (eating) {
+    const { ey } = eyeAt(P.rx, P.ry, P.cy, v.dog);
+    if (COOKIE[bite].length) sprite2(COOKIE[bite], x + 2, ey + (v.dog ? 5 : 3));
+    else sprite(HEART, x + 6, P.cy - P.ry - 6 - Math.min(4, Math.floor((tt - TREAT_MS * .75) / 120)), INK);   // all gone: a heart
+    return;
+  }
   if (m === "break" && !patting) {
     const bounce = rm ? 6 : Math.round(Math.abs(Math.cos(now / 350)) * 12);   // matches ballHeight() in engine.js
     sprite(BALL, 49, GROUND - 5 - bounce, INK);

@@ -819,3 +819,116 @@ test.describe("installed app", () => {
     await expect(page.locator("#screen")).toBeVisible();
   });
 });
+
+test.describe("holidays", () => {
+  const HALLOWEEN = new Date("2026-10-28T09:00:00-05:00");
+  const frame = page => page.locator("#screen").evaluate(c => c.toDataURL());
+
+  test("the pet dresses up for Halloween week, and the look can be turned off", async ({ page }) => {
+    await open(page, { save: petSave({ heartsAt: HALLOWEEN.getTime(), lastStudyAt: HALLOWEEN.getTime(), lastDay: "2026-10-28" }), time: HALLOWEEN });
+    await page.clock.pauseAt(new Date(HALLOWEEN.getTime() + 60000));   // freeze time so frames are comparable
+    await expect(page.locator("#small")).toHaveText("Happy Halloween!");
+    await expect(page.locator("#msg")).toHaveText("Happy Halloween, Alex! Pip dressed up for Halloween.");
+    await expect(page.locator(".device")).toHaveAttribute("data-holiday", "halloween");
+    await expect(page.locator("#screen")).toHaveAttribute("aria-label", /dressed up for Halloween/);
+    const dressed = await frame(page);
+    await page.getByLabel("Holiday looks on the pet").uncheck();
+    await expect(page.locator("#small")).toHaveText("Happy");
+    await expect(page.locator(".device")).not.toHaveAttribute("data-holiday", /.*/);
+    expect(await frame(page)).not.toBe(dressed);
+    expect((await saved(page)).settings.holidays).toBe(false);
+  });
+
+  test("an ordinary day has no holiday", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await expect(page.locator("#small")).toHaveText("Happy");
+    await expect(page.locator("#msg")).toHaveText("Hi, Alex! Pip is ready when you are.");
+  });
+
+  test("test mode previews each holiday with H", async ({ page, isMobile }) => {
+    test.skip(isMobile, "shortcuts are for keyboards");
+    await open(page, { save: petSave() });
+    await page.locator("body").click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press("t");
+    await page.keyboard.press("h");
+    await expect(page.locator("#msg")).toHaveText("Previewing New Year. Press H for the next one.");
+    await expect(page.locator("#small")).toHaveText("Happy New Year!");
+    await page.keyboard.press("h");
+    await expect(page.locator("#small")).toHaveText("Merry Christmas!");
+    await page.keyboard.press("t");                                          // leaving test mode ends the preview
+    await expect(page.locator("#small")).toHaveText("Happy");
+  });
+});
+
+test.describe("treats", () => {
+  const session = async page => {
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+  };
+
+  test("meeting the daily goal earns a treat that adds a heart", async ({ page }) => {
+    await open(page, { save: petSave({ hearts: 1 }) });
+    await expect(page.locator("#treatBtn")).toBeDisabled();
+    await expect(page.locator("#treatCount")).toHaveText("Meet today's goal to earn a treat.");
+    await session(page);
+    await page.clock.fastForward("05:01");
+    await session(page);
+    await expect(page.locator("#msg")).toContainText("Daily goal reached! Pip is so proud of you. You earned a treat.");
+    await expect(page.locator("#treatCount")).toHaveText("1 treat saved");
+    await page.getByRole("button", { name: "Give Pip a treat" }).click();
+    await expect(page.locator("#small")).toHaveText("Yum!");
+    await expect(page.locator("#msg")).toContainText("Yum! Pip");
+    await expect(page.locator("#treatBtn")).toBeDisabled();
+    const s = await saved(page);
+    expect([s.treats, s.treatsGiven]).toEqual([0, 1]);
+  });
+
+  test("treats wait until the session is over, and need a daily goal", async ({ page }) => {
+    await open(page, { save: petSave({ treats: 2 }) });
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await expect(page.locator("#treatBtn")).toBeDisabled();
+    await expect(page.locator("#treatCount")).toHaveText("2 treats saved, for after this session");
+    await page.locator("#keyFocus").click(); await page.locator("#keyFocus").click();   // stop
+    await expect(page.locator("#treatBtn")).toBeEnabled();
+    await page.locator("#goalChips").getByRole("radio", { name: "Off" }).check();
+    await page.getByRole("button", { name: "Give Pip a treat" }).click();
+    await page.getByRole("button", { name: "Give Pip a treat" }).click();
+    await expect(page.locator("#treatCount")).toHaveText("Set a daily goal in Settings to earn treats.");
+  });
+
+  test("an egg has no treats to give", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 0, minutes: 0, treats: 1 }) });
+    await expect(page.locator("#treatRow")).toBeHidden();
+  });
+});
+
+test.describe("stickers", () => {
+  const grownBefore = { earned: true, name: "Mochi", seed: 42, traits: {}, accessory: null, sessions: 20, minutes: 1500,
+    bestStreak: 6, notes: 6, totalNotes: 6, since: null, grownAt: MORNING.getTime() - 86400e3 * 30 };
+
+  test("count the whole album, and open like notes", async ({ page }) => {
+    await open(page, { save: petSave({ album: [grownBefore] }) });
+    const hours = page.locator("button.sticker", { hasText: "25 hours" });
+    await expect(hours).toContainText("New");
+    const sessions = page.locator(".sticker.locked", { hasText: "Finish 50 sessions in all" });
+    await expect(sessions).toContainText("29 of 50");                        // 20 from Mochi, 9 from Pip
+    await expect(page.locator(".sticker.locked", { hasText: "Focus for 50 hours in all" })).toContainText("28 of 50 hours");
+    await hours.click();
+    await expect(page.locator("#noteTitle")).toHaveText("A sticker from Pip: 25 hours");
+    await expect(page.locator("#noteText")).toContainText("Twenty-five hours of focus");
+    await page.locator("#noteDlg [data-close]").click();
+    await expect(hours).not.toContainText("New");
+    expect((await saved(page)).stickers.hours25.read).toBe(true);
+  });
+
+  test("a session that crosses a milestone announces the sticker", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 49, minutes: 900 }) });
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+    await expect(page.locator("#msg")).toContainText("New sticker: 50 sessions!");
+    await expect(page.locator("button.sticker", { hasText: "50 sessions" })).toContainText("New");
+  });
+});
