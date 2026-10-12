@@ -11,7 +11,7 @@
 <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=Silkscreen&display=swap" rel="stylesheet">
+<link href="https://fonts.googleapis.com/css2?family=Fredoka:wght@400;500;600&family=Silkscreen&family=Outfit:wght@400;500;600;800&family=Mochiy+Pop+One&family=Pixelify+Sans:wght@400;500;600;700&family=Press+Start+2P&display=swap" rel="stylesheet">
 <link rel="stylesheet" href="styles.css">
 </head>
 <body>
@@ -23,6 +23,7 @@
   <div class="device-wrap">
     <div class="device">
       <span class="loop" aria-hidden="true"></span>
+      <span class="deco" aria-hidden="true"><i class="d1"></i><i class="d2"></i><i class="d3"></i><i class="d4"></i><i class="d5"></i><i class="d6"></i></span>
       <div class="faceplate">
         <ul class="icons" id="iconsTop" aria-hidden="true"></ul>
         <div class="bezel">
@@ -58,7 +59,7 @@
     <div class="tabs" role="tablist" aria-label="Sections">
       <button role="tab" id="tabToday" aria-controls="panelToday" aria-selected="true">Today</button>
       <button role="tab" id="tabCollection" aria-controls="panelCollection" aria-selected="false" tabindex="-1">Collection<span class="tab-badge" id="collectionBadge" hidden></span></button>
-      <button role="tab" id="tabSettings" aria-controls="panelSettings" aria-selected="false" tabindex="-1">Settings</button>
+      <button role="tab" id="tabSettings" aria-controls="panelSettings" aria-selected="false" tabindex="-1">Settings<span class="tab-badge" id="settingsBadge" hidden></span></button>
     </div>
 
     <div class="tab-panel" role="tabpanel" id="panelToday" aria-labelledby="tabToday">
@@ -159,8 +160,13 @@
       <section class="set-group" aria-labelledby="setLook">
         <h2 id="setLook">Look</h2>
         <fieldset class="lengths goal-pick">
-          <legend>Theme</legend>
+          <legend>Device shell</legend>
+          <div class="shells" id="shellPicker"></div>
+        </fieldset>
+        <fieldset class="lengths goal-pick">
+          <legend>Light or dark</legend>
           <div class="chips" id="themeChips"></div>
+          <p class="hint theme-hint" id="themeHint" hidden></p>
         </fieldset>
         <label class="switch"><input type="checkbox" id="holidayToggle"><span>Holiday looks on the pet</span></label>
       </section>

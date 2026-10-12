@@ -1129,3 +1129,50 @@ test.describe("timer bar", () => {
     await expect(bar).toBeHidden();
   });
 });
+
+test.describe("device shells", () => {
+  const shell = page => page.evaluate(() => document.documentElement.dataset.shell);
+
+  test("start with Classic and Glacier; the others say how to earn them", async ({ page }) => {
+    await open(page, { save: petSave() });
+    expect(await shell(page)).toBe("classic");
+    await tab(page, "Settings");
+    await expect(page.getByRole("radio", { name: /Classic/ })).toBeChecked();
+    await expect(page.locator(".shell-pick.shell-locked", { hasText: "Sweet shop" })).toContainText("study 7 days in a row (1 of 7)");
+    await expect(page.locator(".shell-pick.shell-locked", { hasText: "Card quest" })).toContainText("raise a pet to grown-up (0 of 1)");
+    await expect(page.getByRole("radio", { name: /Card quest/ })).toBeDisabled();
+    await page.getByRole("radio", { name: /Glacier/ }).check();
+    expect(await shell(page)).toBe("glacier");
+    expect((await saved(page)).settings.shell).toBe("glacier");
+    await page.reload();
+    expect(await shell(page)).toBe("glacier");                                // remembered
+  });
+
+  test("raising a pet to grown-up earns Card quest, which is always dark", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 19, minutes: 475 }) });
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+    await expect(page.locator("#msg")).toContainText("New shell: Card quest! Try it in Settings.");
+    await expect(page.getByRole("tab", { name: "Settings" })).toContainText("1");
+    await tab(page, "Settings");
+    await expect(page.locator(".shell-pick", { hasText: "Card quest" })).toContainText("New");
+    await page.getByRole("radio", { name: /Card quest/ }).check();
+    expect(await shell(page)).toBe("quest");
+    await expect(page.locator("#themeHint")).toHaveText("Card quest is always dark.");
+    await expect(page.locator("#themeChips").getByRole("radio", { name: "Light" })).toBeDisabled();
+    await tab(page, "Today");
+    await expect(page.locator("#settingsBadge")).toBeHidden();
+  });
+
+  test("a shell that isn't earned falls back to Classic, and test mode can try any", async ({ page, isMobile }) => {
+    await open(page, { save: petSave({ settings: { sound: false, shell: "quest" } }) });
+    expect(await shell(page)).toBe("classic");
+    test.skip(isMobile, "test mode is a keyboard shortcut");
+    await page.locator("body").click({ position: { x: 5, y: 5 } });
+    await page.keyboard.press("t");
+    expect(await shell(page)).toBe("quest");
+    await page.keyboard.press("t");
+    expect(await shell(page)).toBe("classic");
+  });
+});
