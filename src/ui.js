@@ -1,9 +1,10 @@
 // UI: connects the engine, storage, renderer and alerts to the page.
 
-import { NOTES, LENGTHS, DOG_NAMES } from "./config.js";
-import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, pauseFocus, resumeFocus, focusLeft, pauseLeft, PAUSE_MAX, THEMES, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, tryCatch, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, STAGE_TRAIT, newFeature, describeLook, startNewPet, lifetime } from "./engine.js";
+import { NOTES, LENGTHS, DOG_NAMES, STICKERS, STICKER_HINTS } from "./config.js";
+import { STAGES, migrate, createState, heartsNow, stageIndex, streakNow, mood, startFocus, stopFocus, tickState, pauseFocus, resumeFocus, focusLeft, pauseLeft, PAUSE_MAX, THEMES, unlockNotes, unreadNotes, exportBackup, importBackup, dayKey, daysAgo, lastWeek, needsBackup, goalToday, tryCatch, GOALS, REST_EVERY, INVITE_LIMITS, cleanInvite, encodeInvite, decodeInvite, sameInvite, applyInvite, notePS, isPuppy, accessory, certificate, petLook, STAGE_TRAIT, newFeature, describeLook, startNewPet, lifetime, unlockStickers, unreadStickers, stickerProgress, canTreat, giveTreat, TREAT_MAX, MAX_HEARTS } from "./engine.js";
 import { localStore, askToKeepData } from "./storage.js";
-import { draw, HATCH_MS } from "./render.js";
+import { draw, HATCH_MS, TREAT_MS } from "./render.js";
+import { holidayAt, HOLIDAYS } from "./holidays.js";
 import { drawCard } from "./card.js";
 import { qrEncode, QR_MAX_BYTES } from "./qr.js";
 import { encodeMove, decodeMove } from "./move.js";
@@ -14,9 +15,10 @@ const $ = id => document.getElementById(id);
 const store = localStore;
 let state = migrate(store.load(), Date.now());
 
-const canvas = $("screen"), ctx = canvas.getContext("2d");
+const canvas = $("screen"), ctx = canvas.getContext("2d"), device = canvas.closest(".device");
 const RM = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
-let catchAt = 0, testMode = false, patAt = 0, hatchAt = 0, growAt = 0, stopArmed = 0, resetArmed = 0;
+let catchAt = 0, testMode = false, patAt = 0, hatchAt = 0, growAt = 0, treatAt = 0, stopArmed = 0, resetArmed = 0;
+let previewHoliday = -1;   // test mode: H steps through the holidays (an index into HOLIDAYS), -1 follows the date
 let downloads = null, notesSig = "";
 const unitMs = () => (testMode ? 1000 : 60000);
 // Test mode plays with a copy that is never saved, so practice runs can't
@@ -35,6 +37,17 @@ const MOOD_TEXT = {
   sleepy: "Sleepy, misses you", focus: "Studying with you", break: "Break! Catch the ball", paused: "Paused, waiting for you"
 };
 const nameOr = () => state.name || "Your pet";
+// The holiday the pet dresses up for today, unless holiday looks are off.
+function holidayNow(now) {
+  if (!state.settings.holidays) return null;
+  if (testMode && previewHoliday >= 0) return { ...HOLIDAYS[previewHoliday], day: 3 };
+  return holidayAt(now);
+}
+// A new sticker (or several), in a sentence, or "".
+function stickerText(got) {
+  if (!got.length) return "";
+  return got.length === 1 ? ` New sticker: ${got[0].label}!` : ` ${got.length} new stickers: ${got.map(k => k.label).join(", ")}!`;
+}
 function fmt(ms) {
   const s = Math.max(0, Math.ceil(ms / 1000)), m = Math.floor(s / 60);
   return String(m).padStart(2, "0") + ":" + String(s % 60).padStart(2, "0");
@@ -72,7 +85,12 @@ function handleEvent(ev) {
     }
     else text = `Session done. ${nameOr()} had a snack.`;
     if (ev.notes.length) text += ` You unlocked ${ev.notes.length === 1 ? "a note" : ev.notes.length + " notes"}.`;
-    if (ev.goalMet) { text += ` Daily goal reached! ${nameOr()} is so proud of you.`; if (!ev.grewTo) growAt = Date.now(); }
+    if (ev.goalMet) {
+      text += ` Daily goal reached! ${nameOr()} is so proud of you.`
+        + (ev.treatEarned ? " You earned a treat." : ` The treat jar is full (${TREAT_MAX}), so give one soon.`);
+      if (!ev.grewTo) growAt = Date.now();
+    }
+    text += stickerText(unlockStickers(state, Date.now(), STICKERS));
     if (ev.restUsed) text += ` A rest day kept your ${state.streak}-day streak going.`;
     if (ev.restEarned) text += ` ${REST_EVERY} days in a row earned you a rest day for a day you miss.`;
     if (!ev.breakSkipped) text += ` Enjoy a ${ev.breakMinutes}-minute break.`;
@@ -104,12 +122,20 @@ const STATUS_ICONS = {
   goal:   ["...#...", "...#...", "#######", ".#####.", "..###..", ".##.##.", ".#...#."],
   trophy: ["#######", "#.###.#", "#.###.#", ".#####.", "..###..", "...#...", "..###.."]
 };
+const STICKER_ICONS = {
+  book:  STATUS_ICONS.study,
+  clock: [".#####.", "#..#..#", "#..#..#", "#..###.", "#.....#", "#.....#", ".#####."],
+  flame: ["...#...", "..##...", "..###..", ".#####.", ".##.##.", ".#...#.", "..###.."],
+  egg:   ["..###..", ".#####.", ".##.##.", "#######", "###.###", "#######", ".#####."],
+  treat: [".#####.", "###.###", "#.#####", "#####.#", "##.####", "###.###", ".#####."]
+};
+const pixelSvg = rows => `<svg viewBox="0 0 7 7" fill="currentColor" aria-hidden="true">${
+  rows.flatMap((r, y) => [...r].map((c, x) => (c === "#" ? `<rect x="${x}" y="${y}" width="1" height="1"/>` : ""))).join("")}</svg>`;
 const iconEls = {};
 [["iconsTop", ["meal", "study", "play", "sleep"]], ["iconsBottom", ["love", "note", "goal", "trophy"]]].forEach(([row, names]) => {
   names.forEach(name => {
     const li = document.createElement("li");
-    const rects = STATUS_ICONS[name].flatMap((r, y) => [...r].map((c, x) => (c === "#" ? `<rect x="${x}" y="${y}" width="1" height="1"/>` : ""))).join("");
-    li.innerHTML = `<svg viewBox="0 0 7 7" fill="currentColor">${rects}</svg>`;
+    li.innerHTML = pixelSvg(STATUS_ICONS[name]);
     li.dataset.icon = name;
     $(row).appendChild(li);
     iconEls[name] = li;
@@ -157,11 +183,72 @@ function renderNotes() {
   });
 }
 
+// Locked stickers show what they ask for and how close they are; earned ones open like notes.
+let stickersSig = "";
+function renderStickers() {
+  const sig = JSON.stringify([state.stickers, lifetime(state)]);
+  if (sig === stickersSig) return;
+  stickersSig = sig;
+  const ul = $("stickerList");
+  ul.innerHTML = "";
+  STICKERS.forEach(k => {
+    const li = document.createElement("li"), got = state.stickers[k.id];
+    const el = document.createElement(got ? "button" : "div");
+    el.className = "sticker" + (got ? "" : " locked");
+    el.innerHTML = pixelSvg(STICKER_ICONS[k.icon]);
+    const label = document.createElement("span");
+    if (got) {
+      label.textContent = k.label;
+      el.append(label);
+      if (!got.read) { const nb = document.createElement("span"); nb.className = "new"; nb.textContent = "New"; el.append(nb); }
+      el.addEventListener("click", () => openSticker(k));
+    } else {
+      const [key] = Object.keys(k.need), p = stickerProgress(state, k), hours = key === "minutes";
+      label.textContent = STICKER_HINTS[key].replace("{n}", hours ? p.need / 60 : p.need);
+      const prog = document.createElement("span");
+      prog.className = "sticker-progress";
+      prog.textContent = hours ? `${Math.floor(p.have / 60)} of ${p.need / 60} hours` : `${p.have} of ${p.need}`;
+      el.append(label, prog);
+    }
+    li.appendChild(el);
+    ul.appendChild(li);
+  });
+}
+function openSticker(k) {
+  $("noteTitle").textContent = `A sticker from ${nameOr()}: ${k.label}`;
+  $("noteText").textContent = k.text;
+  $("notePS").hidden = true;
+  state.stickers[k.id].read = true;
+  save(); show($("noteDlg")); render();
+}
+
+/* ---------- Treats ---------- */
+function renderTreats() {
+  const st = stageIndex(state), n = state.treats;
+  $("treatRow").hidden = st === 0;
+  $("treatBtn").textContent = `Give ${nameOr()} a treat`;
+  $("treatBtn").disabled = !canTreat(state);
+  $("treatCount").textContent = n
+    ? `${n} ${n === 1 ? "treat" : "treats"} saved${state.active ? ", for after this session" : ""}`
+    : state.settings.goal ? "Meet today's goal to earn a treat." : "Set a daily goal in Settings to earn treats.";
+}
+$("treatBtn").addEventListener("click", () => {
+  const now = Date.now(), full = heartsNow(state, now) === MAX_HEARTS;
+  if (!giveTreat(state, now)) return;
+  treatAt = now; patAt = 0;
+  say((full ? `Yum! ${nameOr()} is full of hearts and still loved it.` : `Yum! ${nameOr()} loved the treat and got a heart.`)
+    + stickerText(unlockStickers(state, now, STICKERS)));
+  save(); render();
+});
+
 function render() {
   const now = Date.now(), m = mood(state, now), st = stageIndex(state);
-  const unread = unreadNotes(state, NOTES);
-  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, catchAt, rm: RM, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state) });
-  canvas.setAttribute("aria-label", `${nameOr()}, ${STAGES[st].name}, ${MOOD_TEXT[m].toLowerCase()}${unread ? ", new note waiting" : ""}`);
+  const unread = unreadNotes(state, NOTES) + unreadStickers(state, STICKERS);
+  const holiday = holidayNow(now), eating = st > 0 && now - treatAt < TREAT_MS;
+  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, hatchAt, growAt, patAt, catchAt, treatAt, rm: RM, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state), holiday });
+  if (holiday) device.dataset.holiday = holiday.id;   // Halloween dims the LCD (styles.css)
+  else delete device.dataset.holiday;
+  canvas.setAttribute("aria-label", `${nameOr()}, ${STAGES[st].name}, ${MOOD_TEXT[m].toLowerCase()}${holiday && st > 0 ? `, dressed up for ${holiday.name}` : ""}${unread ? ", something new waiting" : ""}`);
 
   let title = "Study Pet";
   if (state.active) {
@@ -175,8 +262,10 @@ function render() {
   }
   if (!isFlashing()) document.title = title;
   $("small").textContent = now - hatchAt < HATCH_MS ? "Hatching!"
+    : eating ? "Yum!"
     : m === "paused" ? `Paused, resumes in ${fmt(pauseLeft(state, now))}`
-    : m === "break" && state.onBreak.catches ? `${state.onBreak.catches} in a row!` : MOOD_TEXT[m];
+    : m === "break" && state.onBreak.catches ? `${state.onBreak.catches} in a row!`
+    : m === "happy" && holiday ? holiday.greet : MOOD_TEXT[m];
   $("patLbl").textContent = m === "break" ? "Catch" : "Pat";
 
   $("focusLbl").textContent = state.active ? (now < stopArmed ? "Sure?" : "Stop")
@@ -214,6 +303,8 @@ function render() {
   $("resetBtn").textContent = now < resetArmed ? "Tap again to erase everything" : "Start over";
   $("testTag").hidden = !testMode;
   renderNotes();
+  renderStickers();
+  renderTreats();
   renderIcons(m, unread, now);
   renderWeek(now);
   renderSeal();
@@ -291,7 +382,7 @@ async function openCard() {
     sessions: state.sessions, focus: fmtMinutes(state.minutes), streak: streakNow(state, now),
     url: (location.host + location.pathname).replace(/\/$/, ""),
     pet: { now: 1300, mood: st === 0 ? "egg" : "happy", stage: st, hearts: 0, unread: 0, hatchAt: -1e12, growAt: -1e12, patAt: -1e12,
-           rm: true, portrait: true, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state) }
+           rm: true, portrait: true, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state), holiday: holidayNow(now) }
   });
   render();   // the renderer was just pointed at the card's canvas; redraw the screen
   cardBlob = await new Promise(r => canvas.toBlob(r, "image/png"));
@@ -575,6 +666,7 @@ function syncSettings() {
   if (notifySupported()) $("notifyToggle").checked = state.settings.notify && Notification.permission === "granted";
   $("awakeToggle").checked = state.settings.awake;
   $("vibrateToggle").checked = state.settings.vibrate;
+  $("holidayToggle").checked = state.settings.holidays;
   document.querySelectorAll("#themeChips input").forEach(i => { i.checked = i.value === state.settings.theme; });
   applyTheme();
   document.querySelectorAll('#goalChips input').forEach(i => { i.checked = +i.value === state.settings.goal; });
@@ -600,6 +692,7 @@ else {
 if (!wakeLockSupported()) $("awakeRow").hidden = true;
 if (!vibrateSupported()) $("vibrateRow").hidden = true;
 $("vibrateToggle").addEventListener("change", e => { state.settings.vibrate = e.target.checked; save(); if (e.target.checked) buzz(80); });
+$("holidayToggle").addEventListener("change", e => { state.settings.holidays = e.target.checked; save(); render(); });
 
 // Theme: follow the device, or always light or dark.
 function applyTheme() {
@@ -682,14 +775,15 @@ $("resetBtn").addEventListener("click", () => {
 function setTestMode(on) {
   testMode = on;
   if (!on) state = migrate(store.load(), Date.now());   // drop the practice copy, back to the real save
-  hatchAt = growAt = patAt = 0; stopArmed = resetArmed = 0; notesSig = "";
+  hatchAt = growAt = patAt = treatAt = 0; stopArmed = resetArmed = 0; notesSig = stickersSig = ""; previewHoliday = -1;
   stopFlash(); syncSettings();
   say(on ? "Test mode on. Sessions last seconds, and nothing here is saved."
          : `Test mode off. Back to ${nameOr()}'s real progress.`);
   render();
 }
 // Keyboard shortcuts, outside text fields and dialogs (where keys already do things):
-// Space starts or stops, P pauses or resumes, L changes the length, T toggles test mode.
+// Space starts or stops, P pauses or resumes, L changes the length, T toggles test mode,
+// and in test mode H steps through the holiday looks.
 document.addEventListener("keydown", e => {
   if (e.ctrlKey || e.metaKey || e.altKey || document.querySelector("dialog[open]")) return;
   if (e.target.closest && e.target.closest("input, textarea, select")) return;
@@ -701,6 +795,11 @@ document.addEventListener("keydown", e => {
   else if (key === "p" && state.active) $("keyLength").click();
   else if (key === "l" && !state.active) $("keyLength").click();
   else if (key === "t" && !state.active) setTestMode(!testMode);
+  else if (key === "h" && testMode) {
+    previewHoliday = previewHoliday + 1 < HOLIDAYS.length ? previewHoliday + 1 : -1;
+    say(previewHoliday >= 0 ? `Previewing ${HOLIDAYS[previewHoliday].name}. Press H for the next one.` : "Holiday preview off. Back to today's date.");
+    render();
+  }
 });
 
 /* Downloads only exist when the page is published on claude.ai; elsewhere this stays null. */
@@ -917,6 +1016,7 @@ function tick() {
 document.addEventListener("visibilitychange", () => { if (!document.hidden) stopFlash(); tick(); });
 
 unlockNotes(state, Date.now(), NOTES);
+unlockStickers(state, Date.now(), STICKERS);   // older saves get the stickers they've already earned
 save();
 protectProgress();
 setInterval(tick, 100);
@@ -926,5 +1026,8 @@ receiveInvite();
 receiveMove();   // asks first; if there's no pet here yet, the name prompt comes after
 if (!$("welcomeDlg").open && !$("invAskDlg").open && !arrivingMove) {
   if (!state.name || !state.userName) openName();
-  else if (!$("msg").textContent) say(`Hi, ${state.userName}! ${nameOr()} is ready when you are.`);
+  else if (!$("msg").textContent) {
+    const h = holidayNow(Date.now());
+    say(h ? `${h.greet.replace(/!$/, "")}, ${state.userName}! ${stageIndex(state) ? `${nameOr()} dressed up` : "Even the egg is ready"} for ${h.name}.` : `Hi, ${state.userName}! ${nameOr()} is ready when you are.`);
+  }
 }
