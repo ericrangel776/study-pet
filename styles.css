@@ -571,3 +571,42 @@ body.has-minibar{padding-bottom:84px}
   [data-shell="quest"] .loop{left:14px;transform:translateY(-50%) scale(.8)}
   [data-shell="quest"] .keys{right:4px;transform:translateY(-50%) scale(.8)}
 }
+
+/* ---------- Classic touch-ups: the panel borrows the device's materials ---------- */
+/* Plastic cards with a keycap edge, keycap chips, LCD readouts for the stats,
+   pixel lettering for labels, and a speckled page like the shell. */
+:root[data-shell="classic"]{--edge:#D3CAEE; --speck:rgba(143,127,208,.14)}
+:root[data-shell="classic"][data-theme="dark"]{--edge:#14111D; --speck:rgba(142,128,207,.1)}
+@media (prefers-color-scheme: dark){:root[data-shell="classic"]:not([data-theme="light"]){--edge:#14111D; --speck:rgba(142,128,207,.1)}}
+[data-shell="classic"] body{background:
+  radial-gradient(circle at 3px 4px, var(--speck) 1.2px, transparent 1.8px) 0 0 / 17px 19px,
+  radial-gradient(50vw 60vh at 28% 30%, color-mix(in srgb, var(--shell) 14%, transparent), transparent 70%),
+  var(--bg)}
+[data-shell="classic"] :is(.week,.msg,.note-btn,.seal,.album li,.sticker:not(.locked),.shell-pick:not(.shell-locked)){
+  border:1.5px solid var(--line);border-radius:18px;box-shadow:inset 0 1px 0 rgba(255,255,255,.7),0 3px 0 var(--edge)}
+[data-shell="classic"] .msg::before{border-width:1.5px}
+/* labels in the screen's pixel lettering */
+[data-shell="classic"] :is(.lengths legend,.pick-row legend,.week-head h2,.notes h2,.stickers h2,.album h2,.set-group h2){
+  font-family:"Silkscreen","Courier New",monospace;font-weight:400;font-size:13px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted)}
+[data-shell="classic"] .notes h2,[data-shell="classic"] .stickers h2,[data-shell="classic"] .album h2{font-size:14px;margin-bottom:12px}
+/* chips and tabs as keycaps: a bottom edge that presses in when chosen */
+[data-shell="classic"] .chips span{box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 3px 0 var(--edge);transition:transform .08s,box-shadow .08s}
+[data-shell="classic"] .chips input:checked + span{transform:translateY(2px);box-shadow:inset 0 2px 3px rgba(0,0,0,.25),0 1px 0 var(--edge)}
+[data-shell="classic"] .tabs{box-shadow:inset 0 2px 4px rgba(30,20,70,.12)}
+[data-shell="classic"] .tabs [role="tab"][aria-selected="true"]{box-shadow:0 2px 0 var(--edge),0 1px 4px rgba(30,20,70,.12)}
+/* the stats as little LCD readouts */
+[data-shell="classic"] .stats div{border:0;border-radius:14px;padding:10px 10px 8px;color:var(--lcd-ink);
+  background:radial-gradient(ellipse at 50% 30%, color-mix(in srgb, var(--lcd), #fff 14%), var(--lcd) 60%, color-mix(in srgb, var(--lcd), #000 8%));
+  box-shadow:inset 0 0 0 1px rgba(0,0,0,.18),inset 0 3px 6px rgba(0,0,0,.14),0 0 0 4px var(--bezel),0 5px 0 4px var(--edge)}
+[data-shell="classic"] .stats{gap:16px;margin:4px 4px 22px}
+[data-shell="classic"] .stats dt,[data-shell="classic"] .stats .tile-note{color:var(--lcd-ink);opacity:.75;font-family:"Silkscreen","Courier New",monospace;font-size:10px;line-height:1.3;text-transform:uppercase}
+[data-shell="classic"] .stats dd{font-family:"Silkscreen","Courier New",monospace;font-weight:400;font-size:19px;line-height:1.5;white-space:nowrap}
+/* the main action looks like the device's own buttons */
+[data-shell="classic"] #treatBtn:not(:disabled),[data-shell="classic"] .primary{background:radial-gradient(circle at 35% 25%, #FFF2CC 0 6%, var(--btn) 45%, var(--btn-lo));
+  color:#2A2440;box-shadow:inset 0 1px 0 rgba(255,255,255,.6),0 3px 0 var(--btn-lo)}
+[data-shell="classic"] .secondary{box-shadow:inset 0 1px 0 rgba(255,255,255,.5),0 3px 0 var(--edge)}
+[data-shell="classic"] :is(.secondary,.primary):active{transform:translateY(2px);box-shadow:0 1px 0 var(--edge)}
+/* the week: square pixel bars, today's in the button yellow */
+[data-shell="classic"] .week-bar{border-radius:2px 2px 0 0;background:linear-gradient(180deg,var(--shell-hi),var(--shell) 60%,var(--shell-lo))}
+[data-shell="classic"] .week-day.today .week-bar{background:linear-gradient(180deg,#FFE08A,var(--btn) 60%,var(--btn-lo))}
+[data-shell="classic"] .goal-dots span{border-radius:3px}
