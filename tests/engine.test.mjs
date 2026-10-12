@@ -647,3 +647,24 @@ test("older saves get an empty treat jar and no stickers, and bad values are cle
   assert.equal(bad.treatsGiven, 0);
   assert.deepEqual(bad.stickers, { a: { at: 5, read: true } });
 });
+
+test("breaks use the chosen lengths, and the long break can be turned off", () => {
+  const s = E.createState(at(2026, 10, 5, 8));
+  s.breakLength = 10; s.longBreak = 30;
+  const lengths = [];
+  for (let i = 0; i < 4; i++) { lengths.push(finishSession(s, at(2026, 10, 5, 9 + i)).breakMinutes); E.endBreak(s); }
+  assert.deepEqual(lengths, [10, 10, 10, 30]);
+  s.longBreak = 0;
+  for (let i = 0; i < 4; i++) { lengths.push(finishSession(s, at(2026, 10, 6, 9 + i)).breakMinutes); E.endBreak(s); }
+  assert.deepEqual(lengths.slice(4), [10, 10, 10, 10]);
+  const ev = finishSession(s, at(2026, 10, 7, 9));
+  assert.equal(s.onBreak.endAt - at(2026, 10, 7, 9), 10 * MIN);   // the timer matches
+  assert.equal(ev.breakMinutes, 10);
+});
+
+test("saves from before break choices keep the old 5 and 15 minutes, and odd values are reset", () => {
+  assert.deepEqual([E.migrate({ sessions: 3 }, 0).breakLength, E.migrate({ sessions: 3 }, 0).longBreak], [5, 15]);
+  const s = E.migrate({ breakLength: 7, longBreak: "long" }, 0);
+  assert.deepEqual([s.breakLength, s.longBreak], [5, 15]);
+  assert.equal(E.migrate({ longBreak: 0 }, 0).longBreak, 0);       // off stays off
+});

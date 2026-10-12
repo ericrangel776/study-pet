@@ -81,6 +81,8 @@ After the first visit, the app opens without an internet connection.
   Halloween (the whole week, with a dimmer screen), Thanksgiving, Hanukkah (a menorah with the night's candles) and
   Christmas. The dates are in `src/holidays.js`; Lunar New Year and Hanukkah come from tables (through 2035 and 2030),
   so add years there as they get close. Settings can turn holiday looks off.
+- Breaks can be 5, 10 or 15 minutes (under Break length). Every 4th session earns a long break of 15, 20 or
+  30 minutes, set in Settings, where it can also be turned off.
 - Meeting the daily goal earns a treat (up to 5 saved). Giving one adds a heart and plays a little snack on the screen.
 - Stickers are lifetime milestones (sessions, hours, best streak, pets grown, treats given). They count every pet in
   the Album, so they keep coming after the certificate. The list is `STICKERS` in `src/config.js`.
