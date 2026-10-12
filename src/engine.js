@@ -2,7 +2,7 @@
 // Every function takes the state (and the current time) as arguments,
 // so the same code can run in the browser, in tests, or later on a server.
 
-export const SAVE_VERSION = 3;
+export const SAVE_VERSION = 4;
 export const USER_NAME_MAX = 24;
 export const HEART_MS = 12 * 3600e3;   // one heart fades every 12 hours
 export const MAX_HEARTS = 4;
@@ -14,6 +14,7 @@ export const MAX_REST = 2;             // ...and up to 2 can be saved
 export const GOALS = [0, 1, 2, 3, 4];  // sessions a day; 0 turns the daily goal off
 export const PAUSE_MAX = 5;            // one pause per session, up to 5 minutes (seconds in test mode)
 export const THEMES = ["auto", "light", "dark"];
+export const TREAT_MAX = 5;           // meeting the daily goal earns a treat; up to 5 can be saved
 export const STAGES = [
   { name: "egg", at: 0 }, { name: "baby", at: 1 }, { name: "kid", at: 4 },
   { name: "teen", at: 10 }, { name: "grown-up", at: 20 }
@@ -50,6 +51,8 @@ export function createState(now, random = Math.random) {
     streak: 0, lastDay: null, lastStudyAt: null, restDays: 0,
     bestStreak: 0, firstStudyAt: null, grownAt: null,   // for the certificate
     bestCatches: 0,                 // the break game's best run
+    treats: 0, treatsGiven: 0,      // earned by meeting the daily goal (see Treats)
+    stickers: {},                   // lifetime milestones across every pet (see Stickers)
     userName: "", certSeen: false,     // userName: the person, used across the app and on the certificate
     length: 25, active: null, onBreak: null,
     notes: {},
@@ -57,13 +60,14 @@ export function createState(now, random = Math.random) {
     album: [],             // grown pets that moved on (see Album below)
     days: {},              // minutes studied per calendar day, keyed by dayKey()
     daySessions: {},       // sessions finished per calendar day, for the daily goal
-    settings: { sound: true, notify: false, awake: false, vibrate: true, goal: 2, theme: "auto", lastBackupAt: null }
+    settings: { sound: true, notify: false, awake: false, vibrate: true, goal: 2, theme: "auto", holidays: true, lastBackupAt: null }
   };
 }
 
 // Upgrade any older save to the current shape. Version 1 saves had no
 // version number, no break mode, and no settings. Version 2 saves had no daily
-// history, so their history starts empty (the totals are kept).
+// history, so their history starts empty (the totals are kept). Version 3 saves
+// had no treats or stickers; stickers already earned unlock on the next load.
 export function migrate(raw, now) {
   if (!raw || typeof raw !== "object") return createState(now);
   const s = Object.assign(createState(now), raw);
@@ -88,6 +92,11 @@ export function migrate(raw, now) {
   if (raw.daySessions && typeof raw.daySessions === "object")
     for (const [k, v] of Object.entries(raw.daySessions)) if (Number.isInteger(v) && v > 0) s.daySessions[k] = v;
   s.bestCatches = Number.isInteger(raw.bestCatches) && raw.bestCatches > 0 ? raw.bestCatches : 0;
+  s.treats = Number.isInteger(raw.treats) ? Math.max(0, Math.min(TREAT_MAX, raw.treats)) : 0;
+  s.treatsGiven = Number.isInteger(raw.treatsGiven) && raw.treatsGiven > 0 ? raw.treatsGiven : 0;
+  s.stickers = {};
+  if (raw.stickers && typeof raw.stickers === "object")
+    for (const [k, v] of Object.entries(raw.stickers)) if (v && Number.isFinite(v.at)) s.stickers[k] = { at: v.at, read: !!v.read };
   s.restDays = Number.isInteger(raw.restDays) ? Math.max(0, Math.min(MAX_REST, raw.restDays)) : 0;
   if (!GOALS.includes(s.settings.goal)) s.settings.goal = 2;
   if (!THEMES.includes(s.settings.theme)) s.settings.theme = "auto";
@@ -280,7 +289,9 @@ export function completeFocus(s, notesList) {
     if (habit) { s.traits[trait] = habit.value; growReason = habit.reason; }
   }
   const goal = s.settings.goal, goalMet = goal > 0 && s.daySessions[today] === goal;
-  return { grewTo: after > before ? after : null, growReason, notes: unlockNotes(s, t, notesList), breakMinutes, goalMet, restUsed, restEarned };
+  const treatEarned = goalMet && s.treats < TREAT_MAX;
+  if (treatEarned) s.treats += 1;
+  return { grewTo: after > before ? after : null, growReason, notes: unlockNotes(s, t, notesList), breakMinutes, goalMet, treatEarned, restUsed, restEarned };
 }
 
 // Called many times a second. Returns an event when a timer runs out, else null.
@@ -406,8 +417,44 @@ export function startNewPet(s, petName, now, notesList, random = Math.random) {
 }
 // Totals across every pet the person has raised.
 export function lifetime(s) {
-  return s.album.reduce((t, e) => ({ sessions: t.sessions + e.sessions, minutes: t.minutes + e.minutes }),
-                        { sessions: s.sessions, minutes: s.minutes });
+  const t = s.album.reduce((t, e) => ({ sessions: t.sessions + e.sessions, minutes: t.minutes + e.minutes, bestStreak: Math.max(t.bestStreak, e.bestStreak) }),
+                           { sessions: s.sessions, minutes: s.minutes, bestStreak: s.bestStreak });
+  return { ...t, pets: s.album.length + (s.grownAt ? 1 : 0), treats: s.treatsGiven };
+}
+
+/* ---------- Stickers ---------- */
+// Milestones for the long run. Unlike notes they count every pet the person has
+// raised, so they keep coming after the certificate, and a new egg keeps them.
+// Each sticker needs one lifetime total: sessions, minutes, streak (the best
+// one), pets (fully grown) or treats (given).
+export function stickerProgress(s, k) {
+  const [key, need] = Object.entries(k.need)[0], have = lifetime(s)[key === "streak" ? "bestStreak" : key];
+  return { have: Math.min(have, need), need };
+}
+export function unlockStickers(s, now, stickerList) {
+  const got = [];
+  stickerList.forEach(k => {
+    if (s.stickers[k.id]) return;
+    const p = stickerProgress(s, k);
+    if (p.have >= p.need) { s.stickers[k.id] = { at: now, read: false }; got.push(k); }
+  });
+  return got;
+}
+export const unreadStickers = (s, stickerList) => stickerList.filter(k => s.stickers[k.id] && !s.stickers[k.id].read).length;
+
+/* ---------- Treats ---------- */
+// Meeting the daily goal earns a treat (see completeFocus). Giving one adds a
+// heart. A hatched pet takes treats any time except mid-session.
+export function canTreat(s) {
+  return s.treats > 0 && stageIndex(s) > 0 && !s.active;
+}
+export function giveTreat(s, now) {
+  if (!canTreat(s)) return false;
+  s.treats -= 1;
+  s.treatsGiven += 1;
+  s.hearts = Math.min(MAX_HEARTS, heartsNow(s, now) + 1);
+  s.heartsAt = now;
+  return true;
 }
 
 /* ---------- Invites ---------- */
