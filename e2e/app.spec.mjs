@@ -22,6 +22,13 @@ async function nameThePet(page, name = "Pip", user = "Alex") {
   await page.locator("#nameSave").click();
   await expect(page.locator("#nameDlg")).toBeHidden();
 }
+// The panel beside the device has three tabs: Today, Collection and Settings.
+// Opens one, unless a dialog is in the way.
+async function tab(page, name) {
+  if (await page.locator("dialog[open]").count()) return;
+  const t = page.getByRole("tab", { name });
+  if (await t.getAttribute("aria-selected") !== "true") await t.click();
+}
 const saved = page => page.evaluate(k => JSON.parse(localStorage.getItem(k)), KEY);
 const petSave = (extra = {}) => ({
   version: 3, name: "Pip", userName: "Alex", sessions: 9, minutes: 225, hearts: 3, heartsAt: MORNING.getTime(),
@@ -88,6 +95,7 @@ test("a first visit needs the person's name, and greets them by it", async ({ pa
   await expect(page.locator("#msg")).toHaveText("Nice to meet you, Jordan! Mochi is waiting in the egg.");
   await page.reload();
   await expect(page.locator("#msg")).toHaveText("Hi, Jordan! Mochi is ready when you are.");
+  await tab(page, "Collection");
   await page.locator("#invOpen").click();
   await expect(page.locator("#invFrom")).toHaveValue("Jordan");               // invites are from them by default
 });
@@ -104,6 +112,7 @@ test("an older save without the person's name asks for it once", async ({ page }
 
 test("starting over keeps the person's name", async ({ page }) => {
   await open(page, { save: petSave() });
+  await tab(page, "Settings");
   await page.locator("#resetBtn").click();
   await page.locator("#resetBtn").click();
   await expect(page.locator("#userInput")).toHaveValue("Alex");
@@ -143,8 +152,10 @@ test("test mode practice never touches the real save", async ({ page }) => {
   await nameThePet(page);
   await page.keyboard.press("t");
   await expect(page.locator("#testTag")).toBeVisible();
+  await tab(page, "Settings");
   await expect(page.locator("#backupBtn")).toBeDisabled();
 
+  await tab(page, "Today");
   await page.getByRole("radio", { name: "15 min" }).check();
   await page.locator("#keyFocus").click();
   await page.clock.fastForward(16000);                    // "15 minutes" is 15 seconds here
@@ -156,6 +167,7 @@ test("test mode practice never touches the real save", async ({ page }) => {
   await expect(page.locator("#testTag")).toBeHidden();
   await expect(page.locator("#msg")).toContainText("Back to Pip's real progress");
   await expect(page.locator("#stSessions")).toHaveText("0");
+  await tab(page, "Collection");
   await expect(page.locator("#notesList")).toContainText("Locked: hatch the egg");
 });
 
@@ -164,6 +176,7 @@ test("notes unlock, open, and lose their New badge", async ({ page }) => {
   await page.getByRole("radio", { name: "15 min" }).check();
   await page.locator("#keyFocus").click();
   await page.clock.fastForward("15:01");
+  await tab(page, "Collection");
   const note = page.locator(".note-btn", { hasText: "Hatch the egg" });
   await expect(note).toContainText("New");
   await note.click();
@@ -177,6 +190,7 @@ test("naming the pet Lila or Daisy turns it into a puppy", async ({ page }) => {
   await page.clock.pauseAt(new Date(MORNING.getTime() + 60000));   // freeze time so frames are comparable
   const frame = () => page.locator("#screen").evaluate(c => c.toDataURL());
   const rename = async name => {
+    await tab(page, "Settings");
     await page.locator("#renameBtn").click();
     await page.locator("#nameInput").fill(name);
     await page.locator("#nameSave").click();
@@ -229,10 +243,12 @@ test.describe("session comforts", () => {
     await open(page, { save: petSave() });
     const bg = () => page.evaluate(() => getComputedStyle(document.body).backgroundColor);
     await page.emulateMedia({ colorScheme: "light" });
+    await tab(page, "Settings");
     await page.locator("#themeChips").getByRole("radio", { name: "Dark" }).check();
     expect(await bg()).toBe("rgb(28, 25, 40)");
     await page.reload();
     expect(await bg()).toBe("rgb(28, 25, 40)");                          // remembered
+    await tab(page, "Settings");
     await expect(page.locator("#themeChips").getByRole("radio", { name: "Dark" })).toBeChecked();
     await page.locator("#themeChips").getByRole("radio", { name: "Match device" }).check();
     expect(await bg()).toBe("rgb(238, 234, 248)");
@@ -246,7 +262,9 @@ test.describe("session comforts", () => {
       window.matchMedia = q => (q === "(pointer: coarse)" ? { matches: true, addEventListener() {} } : mm(q));
     });
     await open(page, { save: petSave() });
+    await tab(page, "Settings");
     await expect(page.locator("#vibrateToggle")).toBeChecked();
+    await tab(page, "Today");
     await page.getByRole("radio", { name: "15 min" }).check();
     await page.locator("#keyFocus").click();
     await page.clock.fastForward("15:01");
@@ -299,9 +317,13 @@ test.describe("daily goal and rest days", () => {
 
   test("the goal can be changed or turned off", async ({ page }) => {
     await open(page, { save: petSave() });
+    await tab(page, "Settings");
     await page.locator("#goalChips").getByRole("radio", { name: "4 a day" }).check();
+    await tab(page, "Today");
     await expect(page.locator("#goalText")).toHaveText("Today: 0 of 4 sessions");
+    await tab(page, "Settings");
     await page.locator("#goalChips").getByRole("radio", { name: "Off" }).check();
+    await tab(page, "Today");
     await expect(page.locator("#goalLine")).toBeHidden();
     await page.reload();
     await expect(page.locator("#goalLine")).toBeHidden();
@@ -311,7 +333,7 @@ test.describe("daily goal and rest days", () => {
     const twoDaysAgo = MORNING.getTime() - 2 * 864e5;
     await open(page, { save: petSave({ streak: 7, bestStreak: 7, restDays: 1, lastDay: "2026-10-3", lastStudyAt: twoDaysAgo }) });
     await expect(page.locator("#stStreak")).toHaveText("7");
-    await expect(page.locator("#stRest")).toHaveText("1 rest day saved");
+    await expect(page.locator("#stRest")).toHaveText("+1 rest day");
     await session(page);
     await expect(page.locator("#msg")).toContainText("A rest day kept your 8-day streak going.");
     await expect(page.locator("#stStreak")).toHaveText("8");
@@ -345,6 +367,7 @@ test.describe("every pet is different", () => {
 
     await page.evaluate(k => { const s = JSON.parse(localStorage.getItem(k)); s.sessions = 20; s.grownAt = s.lastStudyAt; localStorage.setItem(k, JSON.stringify(s)); }, KEY);
     await page.reload();
+    await tab(page, "Collection");
     await page.locator("#sealOpen").click();
     await expect(page.locator("#certLook")).toHaveText("A chubby pet with a belly patch, long bunny ears, a fluffy tail and a curl on top.");
   });
@@ -409,6 +432,7 @@ test.describe("moving to another device", () => {
 
   test("scanning the code on a new device moves the pet over", async ({ page, browser }) => {
     await open(page, { save: petSave({ name: "Mochi", seed: 44, album, days: { "2026-10-5": 45 } }) });
+    await tab(page, "Settings");
     await page.locator("#moveBtn").click();
     await expect(page.locator("#moveQR")).toBeVisible();
     const link = await scanMoveCode(page);
@@ -424,7 +448,9 @@ test.describe("moving to another device", () => {
     await other.locator("#moveAccept").click();
     await expect(other.locator("#msg")).toHaveText("Mochi moved over with all your progress. Welcome back, Alex!");
     await expect(other.locator("#petName")).toHaveText("Mochi");
+    await tab(other, "Collection");
     await expect(other.locator("#album li")).toContainText("Sprout");
+    await tab(other, "Today");
     await expect(other.locator("#weekTotal")).toHaveText("45m");
     await expect(other.locator("#nameDlg")).toBeHidden();
     await other.reload();
@@ -433,6 +459,7 @@ test.describe("moving to another device", () => {
 
   test("a device that already has a pet warns before replacing it", async ({ page }) => {
     await open(page, { save: petSave({ name: "Mochi" }) });
+    await tab(page, "Settings");
     await page.locator("#moveBtn").click();
     const link = await scanMoveCode(page);
     await page.evaluate(k => { const s = JSON.parse(localStorage.getItem(k)); s.name = "Bean"; localStorage.setItem(k, JSON.stringify(s)); }, KEY);
@@ -445,11 +472,13 @@ test.describe("moving to another device", () => {
 
   test("a move link can be pasted, and a damaged one changes nothing", async ({ page }) => {
     await open(page, { save: petSave({ name: "Mochi" }) });
+    await tab(page, "Settings");
     await page.locator("#moveBtn").click();
     const link = await scanMoveCode(page);
     await page.locator("#moveDlg [data-close]").click();
     await page.goto("./#move=zAAAA");
     await expect(page.locator("#msg")).toContainText("This move link looks incomplete");
+    await tab(page, "Collection");
     await page.locator("#invPasteOpen").click();
     await page.locator("#invPasteInput").fill(link);
     await page.locator("#invPasteGo").click();
@@ -463,6 +492,7 @@ test.describe("the album", () => {
 
   test("a grown pet moves into the album and a new egg arrives", async ({ page }) => {
     await open(page, { save: grown() });
+    await tab(page, "Collection");
     await expect(page.locator("#album")).toBeHidden();
     await page.locator("#sealNewPet").click();
     await expect(page.locator("#newPetLead")).toContainText("Mochi moves into your album");
@@ -473,12 +503,15 @@ test.describe("the album", () => {
     await expect(page.locator("#petName")).toHaveText("Bean");
     await expect(page.locator("#small")).toHaveText("Study once to hatch");
     await expect(page.locator("#sealCount")).toHaveText("0 of 20 sessions");
+    await tab(page, "Today");
     await expect(page.locator("#stSessions")).toHaveText("20");             // lifetime totals carry on
+    await tab(page, "Collection");
     await expect(page.locator("#album li")).toHaveCount(1);
     await expect(page.locator("#album li")).toContainText("Mochi");
     await expect(page.locator("#album li")).toContainText("20 sessions, 8h 20m");
 
     await page.reload();
+    await tab(page, "Collection");
     await page.getByRole("button", { name: "Mochi's certificate" }).click();
     await expect(page.locator("#certFor")).toContainText("for raising Mochi");
     await expect(page.locator("#certLook")).toHaveText("A chubby pet with a belly patch, long bunny ears, a fluffy tail and a curl on top.");
@@ -487,6 +520,7 @@ test.describe("the album", () => {
 
   test("the new pet only offers to move on once it's grown too", async ({ page }) => {
     await open(page, { save: grown() });
+    await tab(page, "Collection");
     await expect(page.locator("#sealNewPet")).toBeVisible();
     await page.locator("#sealOpen").click();
     await expect(page.locator("#certNewPet")).toBeVisible();
@@ -500,14 +534,17 @@ test.describe("the album", () => {
 test.describe("the sealed certificate", () => {
   test("shows progress, unseals at full growth, and names the person", async ({ page }) => {
     await open(page, { save: petSave({ sessions: 19, minutes: 475, bestStreak: 5, firstStudyAt: MORNING.getTime() - 20 * 864e5 }) });
+    await tab(page, "Collection");
     await expect(page.locator("#sealCount")).toHaveText("19 of 20 sessions");
     await expect(page.locator("#sealMeter")).toHaveAttribute("aria-valuenow", "19");
     await expect(page.locator("#sealOpen")).toBeHidden();
 
+    await tab(page, "Today");
     await page.getByRole("radio", { name: "15 min" }).check();
     await page.locator("#keyFocus").click();
     await page.clock.fastForward("15:01");
     await expect(page.locator("#msg")).toContainText("Your certificate is unsealed");
+    await tab(page, "Collection");
     await expect(page.locator("#sealLocked")).toBeHidden();
     await expect(page.locator("#sealNew")).toBeVisible();
 
@@ -523,6 +560,7 @@ test.describe("the sealed certificate", () => {
 
   test("prints only the certificate", async ({ page }) => {
     await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime() }) });
+    await tab(page, "Collection");
     await page.locator("#sealOpen").click();
     await page.emulateMedia({ media: "print" });
     await expect(page.locator("main")).toBeHidden();
@@ -534,6 +572,7 @@ test.describe("the sealed certificate", () => {
 test.describe("invites", () => {
   // Build an invite in one browser, then open it in a fresh one, like a friend would.
   async function buildInvite(page, { from, to, welcome, accessory, ps = {}, letter } = {}) {
+    await tab(page, "Collection");
     await page.locator("#invOpen").click();
     if (from !== undefined) await page.locator("#invFrom").fill(from);
     if (to) await page.locator("#invTo").fill(to);
@@ -568,12 +607,15 @@ test.describe("invites", () => {
     await expect(friend.locator("#userInput")).toHaveValue("Riley");         // the name prompt comes after the welcome, pre-filled
     await nameThePet(friend, "Bo");
     await expect(friend.locator("#dedication")).toHaveText("For Riley, from Jamie");
+    await tab(friend, "Collection");
     await expect(friend.locator("#sealHint")).toContainText("Jamie left a message inside");
     await expect(friend.locator(".locked", { hasText: "hatch the egg" })).toContainText("P.S. from Jamie");
 
+    await tab(friend, "Today");
     await friend.getByRole("radio", { name: "15 min" }).check();
     await friend.locator("#keyFocus").click();
     await friend.clock.fastForward("15:01");
+    await tab(friend, "Collection");
     await friend.locator(".note-btn", { hasText: "Hatch the egg" }).click();
     await expect(friend.locator("#noteText")).toHaveText("You hatched me! I'll keep you company while you study.");
     await expect(friend.locator("#notePS")).toHaveText("P.S. from Jamie: So proud of you!");
@@ -586,6 +628,7 @@ test.describe("invites", () => {
       localStorage.setItem(k, JSON.stringify(s));
     }, KEY);
     await friend.reload();
+    await tab(friend, "Collection");
     await friend.locator("#sealOpen").click();
     await expect(friend.locator("#certName")).toHaveText("Riley");
     await expect(friend.locator("#certMsg")).toHaveText("“You did it. Dinner's on me.”\nFrom Jamie");
@@ -626,6 +669,7 @@ test.describe("invites", () => {
     await page.locator("#welcomeDlg [data-close]").click();
     await expect(page.locator("#dedication")).toHaveText("Invited by Sam");
     await expect(page.locator("#stSessions")).toHaveText("9");
+    await tab(page, "Collection");
     await expect(page.locator(".note-btn", { hasText: "Hatch the egg" })).toContainText("New");   // gained a P.S.
   });
 
@@ -633,6 +677,7 @@ test.describe("invites", () => {
     await open(page, { save: petSave() });
     const link = await buildInvite(page, { from: "Ana" });
     await page.locator("#inviteDlg [data-close]").click();
+    await tab(page, "Collection");
     await page.locator("#invPasteOpen").click();
     await page.locator("#invPasteInput").fill("hello");
     await page.locator("#invPasteGo").click();
@@ -646,6 +691,7 @@ test.describe("invites", () => {
   test("the certificate invites the next person, from them by name", async ({ page }) => {
     await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime(),
       invite: { from: "Jamie", to: "Riley", welcome: "", ps: {}, letter: "", accessory: null } }) });
+    await tab(page, "Collection");
     await page.locator("#sealOpen").click();
     await page.locator("#certInvite").click();
     await expect(page.locator("#inviteDlg")).toBeVisible();
@@ -655,6 +701,7 @@ test.describe("invites", () => {
   test("the certificate says who invited them, and the album keeps it", async ({ page }) => {
     await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime(),
       invite: { from: "Jamie", to: "Alex", welcome: "", ps: {}, letter: "", accessory: null } }) });
+    await tab(page, "Collection");
     await page.locator("#sealOpen").click();
     await expect(page.locator("#certInvited")).toHaveText("Invited to Study Pet by Jamie");
     await page.locator("#certNewPet").click();
@@ -665,6 +712,7 @@ test.describe("invites", () => {
 
   test("a certificate without an invite doesn't mention one", async ({ page }) => {
     await open(page, { save: petSave({ sessions: 20, grownAt: MORNING.getTime() }) });
+    await tab(page, "Collection");
     await page.locator("#sealOpen").click();
     await expect(page.locator("#certInvited")).toBeHidden();
   });
@@ -679,6 +727,7 @@ test.describe("invites", () => {
 
 test("a backup restores the pet after starting over", async ({ page }) => {
   await open(page, { save: petSave({ settings: { sound: false, notify: false, lastBackupAt: null } }) });
+  await tab(page, "Settings");
   await page.locator("#backupBtn").click();
   const code = await page.locator("#backupCode").inputValue();
   await page.locator("#backupDlg [data-close]").click();
@@ -687,22 +736,28 @@ test("a backup restores the pet after starting over", async ({ page }) => {
   await page.locator("#resetBtn").click();
   await nameThePet(page, "Bo");
   await page.locator("#soundToggle").check();
+  await tab(page, "Today");
   await expect(page.locator("#stSessions")).toHaveText("0");
 
+  await tab(page, "Settings");
   await page.locator("#restoreBtn").click();
   await page.locator("#restoreCode").fill(code);
   await page.locator("#restoreGo").click();
   await expect(page.locator("#petName")).toHaveText("Pip");
+  await tab(page, "Today");
   await expect(page.locator("#stSessions")).toHaveText("9");
+  await tab(page, "Settings");
   await expect(page.locator("#soundToggle")).not.toBeChecked();   // settings follow the backup
 });
 
 test("a bad backup code is rejected with a clear message", async ({ page }) => {
   await open(page, { save: petSave() });
+  await tab(page, "Settings");
   await page.locator("#restoreBtn").click();
   await page.locator("#restoreCode").fill("not a backup");
   await page.locator("#restoreGo").click();
   await expect(page.locator("#restoreStatus")).toContainText("doesn't look like a Study Pet backup");
+  await tab(page, "Today");
   await expect(page.locator("#stSessions")).toHaveText("9");
 });
 
@@ -728,6 +783,7 @@ test.describe("keeping progress safe", () => {
   test("nudges for a backup when the browser won't promise to keep the pet", async ({ page }) => {
     await refuseStorage(page);
     await open(page, { save: petSave() });
+    await tab(page, "Settings");
     await expect(page.locator("#backupHint")).toContainText("worth backing up");
     await expect(page.locator("#backupBtn")).toHaveClass(/nudge/);
 
@@ -743,6 +799,7 @@ test.describe("keeping progress safe", () => {
     await refuseStorage(page);
     await open(page);
     await nameThePet(page);
+    await tab(page, "Settings");
     await expect(page.locator("#backupBtn")).not.toHaveClass(/nudge/);
   });
 
@@ -751,6 +808,7 @@ test.describe("keeping progress safe", () => {
 
     test("warns about the 7-day rule and suggests the Home Screen", async ({ page }) => {
       await open(page, { save: petSave({ settings: { sound: false, notify: false, lastBackupAt: MORNING.getTime() } }) });
+      await tab(page, "Settings");
       await expect(page.locator("#backupHint")).toContainText("Safari can erase website data after 7 days");
       await expect(page.locator("#installHint")).toContainText("Add to Home Screen");
     });
@@ -776,6 +834,7 @@ test("keeps the screen on only while a timer runs, when the setting is on", asyn
   await page.clock.runFor(500);
   expect(await log()).toEqual([]);                    // off by default
 
+  await tab(page, "Settings");
   await page.locator("#awakeToggle").check();
   await page.clock.runFor(500);
   expect(await log()).toEqual(["on"]);                // asks once, not every tick
@@ -787,6 +846,7 @@ test("keeps the screen on only while a timer runs, when the setting is on", asyn
   await page.clock.runFor(500);
   expect(await log()).toEqual(["on", "off"]);
   await page.reload();
+  await tab(page, "Settings");
   await expect(page.locator("#awakeToggle")).toBeChecked();
 });
 
@@ -832,6 +892,7 @@ test.describe("holidays", () => {
     await expect(page.locator(".device")).toHaveAttribute("data-holiday", "halloween");
     await expect(page.locator("#screen")).toHaveAttribute("aria-label", /dressed up for Halloween/);
     const dressed = await frame(page);
+    await tab(page, "Settings");
     await page.getByLabel("Holiday looks on the pet").uncheck();
     await expect(page.locator("#small")).toHaveText("Happy");
     await expect(page.locator(".device")).not.toHaveAttribute("data-holiday", /.*/);
@@ -892,7 +953,9 @@ test.describe("treats", () => {
     await expect(page.locator("#treatCount")).toHaveText("2 treats saved, for after this session");
     await page.locator("#keyFocus").click(); await page.locator("#keyFocus").click();   // stop
     await expect(page.locator("#treatBtn")).toBeEnabled();
+    await tab(page, "Settings");
     await page.locator("#goalChips").getByRole("radio", { name: "Off" }).check();
+    await tab(page, "Today");
     await page.getByRole("button", { name: "Give Pip a treat" }).click();
     await page.getByRole("button", { name: "Give Pip a treat" }).click();
     await expect(page.locator("#treatCount")).toHaveText("Set a daily goal in Settings to earn treats.");
@@ -910,6 +973,7 @@ test.describe("stickers", () => {
 
   test("count the whole album, and open like notes", async ({ page }) => {
     await open(page, { save: petSave({ album: [grownBefore] }) });
+    await tab(page, "Collection");
     const hours = page.locator("button.sticker", { hasText: "25 hours" });
     await expect(hours).toContainText("New");
     const sessions = page.locator(".sticker.locked", { hasText: "Finish 50 sessions in all" });
@@ -929,6 +993,7 @@ test.describe("stickers", () => {
     await page.locator("#keyFocus").click();
     await page.clock.fastForward("15:01");
     await expect(page.locator("#msg")).toContainText("New sticker: 50 sessions!");
+    await tab(page, "Collection");
     await expect(page.locator("button.sticker", { hasText: "50 sessions" })).toContainText("New");
   });
 });
@@ -953,12 +1018,114 @@ test.describe("break lengths", () => {
 
   test("the long break can be changed or turned off", async ({ page }) => {
     await open(page, { save: petSave({ sessions: 11 }) });                   // the next session is the 12th
+    await tab(page, "Settings");
     await expect(page.getByRole("radio", { name: "15-minute long break" })).toBeChecked();
     await page.getByRole("radio", { name: "No long break" }).check();
+    await tab(page, "Today");
     await page.getByRole("radio", { name: "15 min" }).check();
     await page.locator("#keyFocus").click();
     await page.clock.fastForward("15:01");
     await expect(page.locator("#msg")).toContainText("Enjoy a 5-minute break.");
     expect((await saved(page)).longBreak).toBe(0);
+  });
+});
+
+test.describe("page layout", () => {
+  test("the pet's messages show right under the device, on screen", async ({ page }) => {
+    await open(page, { save: petSave() });
+    const msg = await page.locator("#msg").boundingBox(), dev = await page.locator(".device").boundingBox();
+    expect(msg.y).toBeGreaterThan(dev.y + dev.height);
+    expect(msg.y + msg.height).toBeLessThanOrEqual(page.viewportSize().height + (await page.evaluate(() => scrollY)) + 400);
+  });
+
+  test("tabs switch with a click or the arrow keys, and Collection counts what's new", async ({ page }) => {
+    await open(page, { save: petSave() });                                   // 9 sessions: 2 unread notes
+    await expect(page.locator("#panelToday")).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Collection" })).toContainText("2");
+    await page.getByRole("tab", { name: "Today" }).focus();
+    await page.keyboard.press("ArrowRight");
+    await expect(page.getByRole("tab", { name: "Collection" })).toHaveAttribute("aria-selected", "true");
+    await expect(page.locator("#panelCollection")).toBeVisible();
+    await expect(page.locator("#panelToday")).toBeHidden();
+    await page.keyboard.press("End");
+    await expect(page.getByRole("tab", { name: "Settings" })).toBeFocused();
+    await page.keyboard.press("ArrowRight");                                 // wraps around
+    await expect(page.getByRole("tab", { name: "Today" })).toHaveAttribute("aria-selected", "true");
+    await tab(page, "Collection");
+    await page.locator(".note-btn", { hasText: "Hatch the egg" }).click();
+    await page.locator("#noteDlg [data-close]").click();
+    await expect(page.locator("#collectionBadge")).toHaveText("1 new");
+  });
+
+  test("locked notes show how close they are", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await tab(page, "Collection");
+    await expect(page.locator(".locked", { hasText: "study 7 days in a row" })).toContainText("1 of 7 days");
+    await expect(page.locator(".locked", { hasText: "help your pet fully grow" })).toContainText("9 of 20 sessions");
+  });
+
+  test("stickers show the earned ones and the closest few, until Show all", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 30, minutes: 1500 }) });   // 25 hours: one earned
+    await tab(page, "Collection");
+    await expect(page.locator(".sticker")).toHaveCount(4);
+    await page.getByRole("button", { name: "Show all 11 stickers" }).click();
+    await expect(page.locator(".sticker")).toHaveCount(11);
+    await page.getByRole("button", { name: "Show fewer" }).click();
+    await expect(page.locator(".sticker")).toHaveCount(4);
+  });
+
+  test("the intro hides after the first few sessions", async ({ page }) => {
+    await open(page, { save: petSave({ sessions: 2, minutes: 50 }) });
+    await expect(page.locator("#lead")).toBeVisible();
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    await page.clock.fastForward("15:01");
+    await expect(page.locator("#lead")).toBeHidden();
+  });
+
+  test("days the goal was met get a dot in the week chart", async ({ page }) => {
+    await open(page, { save: petSave({ days: { "2026-10-4": 50, "2026-10-3": 25 }, daySessions: { "2026-10-4": 2, "2026-10-3": 1 } }) });
+    await expect(page.locator(".week-day.met")).toHaveCount(1);
+  });
+
+  test("text buttons are tall enough to tap", async ({ page }) => {
+    await open(page, { save: petSave() });
+    for (const name of ["Today", "Collection", "Settings"]) {
+      await tab(page, name);
+      const heights = await page.locator(".tab-panel:not([hidden]) button.link").evaluateAll(bs =>
+        bs.filter(b => b.offsetParent).map(b => b.getBoundingClientRect().height));
+      expect(heights.length).toBeGreaterThan(0);
+      for (const h of heights) expect(h).toBeGreaterThanOrEqual(44);
+    }
+  });
+
+  test("Settings keeps Start over with your data, away from the pet", async ({ page }) => {
+    await open(page, { save: petSave() });
+    await tab(page, "Settings");
+    for (const g of ["Alerts", "Study", "Look", "You and your data"]) await expect(page.getByRole("heading", { name: g })).toBeVisible();
+    await expect(page.getByRole("region", { name: "You and your data" }).getByRole("button", { name: "Start over" })).toBeVisible();
+  });
+});
+
+test.describe("timer bar", () => {
+  test("keeps the time and controls in reach when the device scrolls away", async ({ page, isMobile }) => {
+    test.skip(!isMobile, "on wider screens the device stays in view");
+    await open(page, { save: petSave() });
+    await page.getByRole("radio", { name: "15 min" }).check();
+    await page.locator("#keyFocus").click();
+    const bar = page.locator("#miniBar");
+    await expect(bar).toBeHidden();                                          // the device is still in view
+    await page.evaluate(() => scrollTo(0, document.body.scrollHeight));
+    await expect(bar).toBeVisible();
+    await expect(page.locator("#miniTime")).toHaveText("15:00");
+    await page.locator("#miniPause").click();
+    await expect(page.locator("#miniWhat")).toHaveText("Paused");
+    await expect(page.locator("#miniPause")).toHaveText("Resume");
+    await page.locator("#miniPause").click();
+    await page.locator("#miniStop").click();
+    await expect(page.locator("#miniStop")).toHaveText("Tap again to stop");
+    await page.locator("#miniStop").click();
+    await expect(page.locator("#msg")).toContainText("Stopped early");
+    await expect(bar).toBeHidden();
   });
 });
