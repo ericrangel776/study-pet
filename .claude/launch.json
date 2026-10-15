@@ -3,8 +3,8 @@
   "configurations": [
     {
       "name": "study-pet",
-      "runtimeExecutable": "npx",
-      "runtimeArgs": ["--yes", "serve", ".", "-l", "8793"],
+      "runtimeExecutable": "node",
+      "runtimeArgs": ["scripts/serve.mjs", ".", "8793"],
       "port": 8793
     }
   ]
