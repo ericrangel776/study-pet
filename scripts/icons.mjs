@@ -4,10 +4,10 @@
 
 import { writeFileSync, mkdirSync } from "node:fs";
 import { deflateSync } from "node:zlib";
-import { draw } from "../src/render.js";
+import { draw, PALETTES } from "../src/render.js";
 
 const W = 64, H = 48;
-const LCD = [0xB9, 0xC7, 0x9A];
+const LCD = [1, 3, 5].map(k => parseInt(PALETTES.classic.lcd.slice(k, k + 2), 16));   // the screen behind the pet
 
 // A stand-in for a canvas 2D context: just enough for render.js.
 const px = new Array(W * H).fill(null);
