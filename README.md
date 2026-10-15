@@ -26,7 +26,7 @@ e2e/
   app.spec.mjs      Browser tests for the built app (Playwright)
 scripts/
   icons.mjs    Draws the app icons from the pet's pixel art
-  serve.mjs    Small static server the browser tests use
+  serve.mjs    Small static server for `npm run dev`, `npm run preview` and the browser tests
 icons/         App icons (generated, committed)
 index.html, styles.css   Page structure and styles
 manifest.webmanifest     App name, colors and icons for installing

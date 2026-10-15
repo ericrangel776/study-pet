@@ -703,3 +703,14 @@ test("older saves start on the classic shell, and bad shell entries are dropped"
   const bad = E.migrate({ shells: { sweet: { at: 5 }, quest: "yes", x: { at: "soon" } } }, 0);
   assert.deepEqual(bad.shells, { sweet: { at: 5, seen: false } });
 });
+
+test("loading a save checks its settings and leaves the saved copy alone", () => {
+  const raw = { sessions: 3, settings: { goal: 9, theme: "neon", sound: false } };
+  const before = JSON.stringify(raw);
+  const s = E.migrate(raw, 0);
+  assert.equal(s.settings.goal, 2);
+  assert.equal(s.settings.theme, "auto");
+  assert.equal(s.settings.sound, false);
+  assert.equal(s.settings.holidays, true);   // missing settings get their defaults
+  assert.equal(JSON.stringify(raw), before);
+});

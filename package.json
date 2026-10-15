@@ -7,8 +7,8 @@
   "scripts": {
     "test": "node --test tests/engine.test.mjs tests/holidays.test.mjs tests/move.test.mjs",
     "build": "node build.mjs",
-    "dev": "npx --yes serve .",
-    "preview": "npm run build && npx --yes serve dist",
+    "dev": "node scripts/serve.mjs . 8793",
+    "preview": "npm run build && node scripts/serve.mjs dist 8794",
     "icons": "node scripts/icons.mjs",
     "test:browser": "playwright test"
   },

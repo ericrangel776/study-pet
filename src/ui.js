@@ -11,7 +11,80 @@ import { encodeMove, decodeMove } from "./move.js";
 import { unlockAudio, playChime, notifySupported, requestNotify, sendNotification, flashTitle, stopFlash, isFlashing, wakeLockSupported, keepAwake, vibrateSupported, buzz } from "./alerts.js";
 import { registerServiceWorker, watchInstall, promptInstall, isIOS, isInstalled } from "./pwa.js";
 
-const $ = id => document.getElementById(id);
+/* ---------- Page helpers ---------- */
+const elements = new Map();
+const $ = id => {
+  let el = elements.get(id);
+  if (!el) elements.set(id, el = document.getElementById(id));
+  return el;
+};
+// The timer redraws ten times a second, and even an unchanged write makes the
+// browser redo work, so these only touch the page when something changed.
+function setText(id, text) {
+  const el = $(id);
+  text = String(text);
+  if (el.textContent !== text) el.textContent = text;
+}
+function setHidden(id, hidden) {
+  if ($(id).hidden !== hidden) $(id).hidden = hidden;
+}
+function setLabel(target, label) {
+  if (target.getAttribute("aria-label") !== label) target.setAttribute("aria-label", label);
+}
+// A count on a tab, read out as "2 new".
+function setCount(id, n) {
+  if ($(id).dataset.n === String(n)) return;
+  $(id).dataset.n = n;
+  $(id).hidden = !n;
+  $(id).innerHTML = n ? `${n}<span class="sr-only"> new</span>` : "";
+}
+// Lists only rebuild when what they show changes, so their buttons keep focus.
+const shownSigs = new Map();
+function changed(key, ...inputs) {
+  const sig = JSON.stringify(inputs);
+  if (shownSigs.get(key) === sig) return false;
+  shownSigs.set(key, sig);
+  return true;
+}
+function el(tag, className, text) {
+  const e = document.createElement(tag);
+  if (className) e.className = className;
+  if (text !== undefined) e.textContent = text;
+  return e;
+}
+const newTag = () => el("span", "new", "New");
+// A row of radio buttons that look like chips. options: [value, text, aria-label?].
+// Returns select(value) to check one, and value() for the checked one.
+function chips(box, name, options, onPick) {
+  const inputs = options.map(([value, text, aria]) => {
+    const label = el("label"), input = el("input");
+    input.type = "radio"; input.name = name; input.value = value ?? "";
+    if (aria) input.setAttribute("aria-label", aria);
+    label.append(input, el("span", "", text));
+    input.addEventListener("change", () => onPick(value));
+    $(box).appendChild(label);
+    return input;
+  });
+  return {
+    inputs,
+    select: current => inputs.forEach((i, k) => { i.checked = options[k][0] === current; }),
+    value: () => options[inputs.findIndex(i => i.checked)][0]
+  };
+}
+// Copies text. Where the clipboard is blocked, selects `field` and tries the old copy command.
+async function copyText(text, field) {
+  try { await navigator.clipboard.writeText(text); return true; }
+  catch (e) {
+    if (!field) return false;
+    field.select();
+    try { return document.execCommand("copy"); } catch (e2) { return false; }
+  }
+}
+const show = d => (d.showModal ? d.showModal() : d.setAttribute("open", ""));
+const hide = d => (d.close ? d.close() : d.removeAttribute("open"));
+document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => hide(b.closest("dialog"))));
+
+/* ---------- State ---------- */
 const store = localStore;
 let state = migrate(store.load(), Date.now());
 
@@ -19,11 +92,17 @@ const canvas = $("screen"), ctx = canvas.getContext("2d"), device = canvas.close
 const RM = !!(window.matchMedia && matchMedia("(prefers-reduced-motion: reduce)").matches);
 let catchAt = 0, testMode = false, patAt = 0, hatchAt = 0, growAt = 0, treatAt = 0, stopArmed = 0, resetArmed = 0;
 let previewHoliday = -1;   // test mode: H steps through the holidays (an index into HOLIDAYS), -1 follows the date
-let downloads = null, notesSig = "";
+let downloads = null;
 const unitMs = () => (testMode ? 1000 : 60000);
 // Test mode plays with a copy that is never saved, so practice runs can't
 // add sessions, streak days or notes to the real pet.
 const save = () => (testMode ? true : store.save(state));
+// Swap in another save (restored, moved, started over, or test mode's) and show it.
+function replaceState(next) {
+  state = next;
+  shownSigs.clear();
+  syncSettings();
+}
 
 // Once there's progress, ask the browser to keep it. dataKept is true when it agrees.
 let dataKept = false;
@@ -32,11 +111,15 @@ function protectProgress() {
   askToKeepData().then(ok => { dataKept = ok; });
 }
 
+/* ---------- Words ---------- */
 const MOOD_TEXT = {
   egg: "Study once to hatch", happy: "Happy", hungry: "Hungry, time to study",
   sleepy: "Sleepy, misses you", focus: "Studying with you", break: "Break! Catch the ball", paused: "Paused, waiting for you"
 };
 const nameOr = () => state.name || "Your pet";
+const puppy = (s = state) => isPuppy(s, DOG_NAMES);
+// The current pet's looks, for anything that draws it.
+const petTraits = () => ({ dog: puppy(), accessory: accessory(state), look: petLook(state) });
 // The holiday the pet dresses up for today, unless holiday looks are off.
 function holidayNow(now) {
   if (!state.settings.holidays) return null;
@@ -64,6 +147,10 @@ function fmtMinutes(total) {
   const hrs = Math.floor(total / 60), mins = total % 60;
   return hrs ? `${hrs}h ${mins}m` : `${mins}m`;
 }
+const plural = (n, one, many = one + "s") => `${n} ${n === 1 ? one : many}`;
+const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
+const longDate = t => new Date(t).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
+const shortDate = t => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
 
 /* ---------- Timer events ---------- */
 function alertUser(title, body, tones) {
@@ -78,10 +165,10 @@ function handleEvent(ev) {
   if (!ev) return;
   if (ev.type === "focusDone") {
     let text;
-    const isNew = ev.grewTo ? newFeature(petLook(state), ev.grewTo, isPuppy(state, DOG_NAMES)) : "";   // each stage shows off something new
+    const isNew = ev.grewTo ? newFeature(petLook(state), ev.grewTo, puppy()) : "";   // each stage shows off something new
     if (ev.grewTo === 1) { hatchAt = Date.now(); text = `${nameOr()} hatched! It's ${isNew}.`; }
     else if (ev.grewTo) {
-      const why = ev.growReason && !(isPuppy(state, DOG_NAMES) && STAGE_TRAIT[ev.grewTo] === "ears") ? `, ${ev.growReason}` : "";   // puppies keep floppy ears
+      const why = ev.growReason && !(puppy() && STAGE_TRAIT[ev.grewTo] === "ears") ? `, ${ev.growReason}` : "";   // puppies keep floppy ears
       growAt = Date.now(); text = `${nameOr()} grew into a ${STAGES[ev.grewTo].name}${isNew ? ` and has ${isNew}${why}` : ""}!`;
       if (ev.grewTo === STAGES.length - 1) text += " Your certificate is unsealed. Find it in Collection.";
     }
@@ -136,7 +223,7 @@ const pixelSvg = rows => `<svg viewBox="0 0 7 7" fill="currentColor" aria-hidden
 const iconEls = {};
 [["iconsTop", ["meal", "study", "play", "sleep"]], ["iconsBottom", ["love", "note", "goal", "trophy"]]].forEach(([row, names]) => {
   names.forEach(name => {
-    const li = document.createElement("li");
+    const li = el("li");
     li.innerHTML = pixelSvg(STATUS_ICONS[name]);
     li.dataset.icon = name;
     $(row).appendChild(li);
@@ -152,47 +239,137 @@ function renderIcons(m, unread, now) {
 }
 
 /* ---------- Rendering ---------- */
-function renderNotes() {
-  const sig = JSON.stringify([state.notes, state.invite, state.name, state.sessions, state.minutes, streakNow(state, Date.now())]);
-  if (sig === notesSig) return;      // only rebuild when notes change, so buttons keep focus
-  notesSig = sig;
+// The screen, the timer and the device keys change from moment to moment, so
+// renderFrame() runs on every tick. Everything else only changes when the state
+// does, so render() (both) runs after each change and once a minute for the date.
+let panelsMinute = -1;
+function render(now = Date.now()) {
+  panelsMinute = Math.floor(now / 60000);
+  renderPanels(now);
+  renderFrame(now);
+}
+
+function renderFrame(now) {
+  const m = mood(state, now), a = state.active;
+  const left = a ? fmt(focusLeft(state, now)) : state.onBreak ? fmt(state.onBreak.endAt - now) : "";
+  const title = a ? (a.pausedAt ? `Paused ${left}` : `${left} Study Pet`) : state.onBreak ? `${left} Break` : "Study Pet";
+  if (!isFlashing() && document.title !== title) document.title = title;
+  if (document.hidden) return;   // only the title shows; the next tick in view draws the rest
+
+  const st = stageIndex(state), unread = unreadNotes(state, NOTES) + unreadStickers(state, STICKERS);
+  const holiday = holidayNow(now), eating = st > 0 && now - treatAt < TREAT_MS;
+  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, treats: state.treats, hatchAt, growAt, patAt, catchAt, treatAt, rm: RM, holiday, ...petTraits() });
+  if (device.dataset.holiday !== (holiday ? holiday.id : undefined)) {   // Halloween dims the LCD (styles.css)
+    if (holiday) device.dataset.holiday = holiday.id;
+    else delete device.dataset.holiday;
+  }
+  setLabel(canvas, `${nameOr()}, ${STAGES[st].name}, ${MOOD_TEXT[m].toLowerCase()}${holiday && st > 0 ? `, dressed up for ${holiday.name}` : ""}${unread ? ", something new waiting" : ""}`);
+
+  setText("big", left || nameOr());
+  setText("small", now - hatchAt < HATCH_MS ? "Hatching!"
+    : eating ? "Yum!"
+    : m === "paused" ? `Paused, resumes in ${fmt(pauseLeft(state, now))}`
+    : m === "break" && state.onBreak.catches ? `${state.onBreak.catches} in a row!`
+    : m === "happy" && holiday ? holiday.greet : MOOD_TEXT[m]);
+
+  // The screen's soft-key labels name each button's current action (six letters at most:
+  // they sit on the screen above each button); screen readers get the same name.
+  // During a session the middle key pauses (once) and resumes.
+  setText("patLbl", m === "break" ? "Catch" : "Pat");
+  setText("focusLbl", a ? (now < stopArmed ? "Sure?" : "Stop") : state.onBreak ? "Next" : "Focus");
+  setText("lengthLbl", !a ? "Length" : a.pausedAt ? "Resume" : "Pause");
+  $("keyLength").disabled = !!a && a.pauseUsed && !a.pausedAt;
+  [["keyFocus", "focusLbl"], ["keyLength", "lengthLbl"], ["keyPat", "patLbl"]].forEach(([key, lbl]) => {
+    setLabel($(key), $(lbl).textContent);
+    $(lbl).classList.toggle("off", $(key).disabled);
+  });
+  renderIcons(m, unread, now);
+  setText("resetBtn", now < resetArmed ? "Tap again to erase everything" : "Start over");
+  renderMiniBar(now);
+}
+
+const LEAD_UNTIL = 3;   // the intro is for the first few sessions
+function renderPanels(now) {
+  const st = stageIndex(state), total = lifetime(state);   // totals across every pet raised
+  lengthChips.inputs.forEach(i => { i.disabled = !!state.active; });
+  lengthChips.select(state.length);
+  breakChips.select(state.breakLength);
+  longBreakChips.select(state.longBreak);
+
+  setText("petName", nameOr());
+  setHidden("lead", total.sessions >= LEAD_UNTIL);
+  setText("cardOpen", `Share a picture of ${nameOr()}`);
+  const inv = state.invite;
+  setText("dedication", inv ? (inv.to ? `For ${inv.to}, from ${inv.from}` : `Invited by ${inv.from}`) : "");
+  setHidden("dedication", !inv);
+  setText("stStreak", streakNow(state, now));
+  setText("stRest", state.restDays ? `+${plural(state.restDays, "rest day")}` : "");
+  $("stRest").title = state.restDays ? "Saved rest days cover a day you miss" : "";
+  setHidden("stRest", !state.restDays);
+  setText("stSessions", total.sessions);
+  setText("stTime", fmtMinutes(total.minutes));
+  const nx = STAGES[st + 1], left = nx ? nx.at - state.sessions : 0;
+  setText("next", nx
+    ? (st === 0 ? "One finished session hatches the egg." : `${plural(left, "more session", "more sessions")} until ${nameOr()} grows.`)
+    : `${nameOr()} is fully grown. Keep the streak going.`);
+
+  renderGoal(now);
+  renderBackupHint(now);
+  $("backupBtn").disabled = $("restoreBtn").disabled = testMode;
+  setHidden("testTag", !testMode);
+  renderNotes(now);
+  renderStickers();
+  renderTreats();
+  renderWeek(now);
+  renderSeal();
+  renderAlbum();
+  renderShells();
+  // The Collection tab counts what's new inside it: notes, stickers and an unsealed certificate.
+  setCount("collectionBadge", unreadNotes(state, NOTES) + unreadStickers(state, STICKERS) + (state.grownAt && !state.certSeen ? 1 : 0));
+  setCount("settingsBadge", unseenShells(state, SHELLS));
+}
+
+/* ---------- Notes and stickers ---------- */
+function renderNotes(now) {
+  if (!changed("notes", state.notes, state.invite, state.name, state.sessions, state.minutes, streakNow(state, now))) return;
   $("notesTitle").textContent = `Notes from ${nameOr()}`;
   const ul = $("notesList");
   ul.innerHTML = "";
   NOTES.forEach(n => {
-    const li = document.createElement("li"), got = state.notes[n.id];
+    const li = el("li"), got = state.notes[n.id];
     if (got) {
-      const b = document.createElement("button");
-      b.className = "note-btn";
-      const label = document.createElement("span");
-      label.textContent = n.hint;
-      b.appendChild(label);
-      if (!got.read) { const nb = document.createElement("span"); nb.className = "new"; nb.textContent = "New"; b.appendChild(nb); }
+      const b = el("button", "note-btn");
+      b.append(el("span", "", n.hint));
+      if (!got.read) b.append(newTag());
       b.addEventListener("click", () => openNote(n));
-      li.appendChild(b);
+      li.append(b);
     } else {
-      const s = document.createElement("span"), what = document.createElement("span"), prog = document.createElement("span");
-      s.className = "locked";
-      what.textContent = `Locked: ${n.hint.toLowerCase()}`;
-      if (notePS(state, n)) {   // a teaser: something from the inviter waits here
-        const tag = document.createElement("span");
-        tag.className = "ps-tag"; tag.textContent = `P.S. from ${state.invite.from}`;
-        what.appendChild(tag);
-      }
-      const p = noteProgress(state, n, Date.now());
-      prog.className = "note-progress";
-      prog.textContent = `${p.have} of ${p.need} ${p.unit}`;
-      s.append(what, prog);
-      li.appendChild(s);
+      const what = el("span", "", `Locked: ${n.hint.toLowerCase()}`), p = noteProgress(state, n, now);
+      if (notePS(state, n)) what.append(el("span", "ps-tag", `P.S. from ${state.invite.from}`));   // a teaser: something from the inviter waits here
+      const box = el("span", "locked");
+      box.append(what, el("span", "note-progress", `${p.have} of ${p.need} ${p.unit}`));
+      li.append(box);
     }
     ul.appendChild(li);
   });
+}
+function showNote(title, text, ps) {
+  $("noteTitle").textContent = title;
+  $("noteText").textContent = text;
+  $("notePS").textContent = ps;
+  $("notePS").hidden = !ps;
+  save(); show($("noteDlg")); render();
+}
+function openNote(n) {
+  const ps = notePS(state, n);
+  state.notes[n.id].read = true;
+  showNote(`A note from ${nameOr()}`, n.text, ps ? `P.S. from ${state.invite.from}: ${ps}` : "");
 }
 
 // Locked stickers show what they ask for and how close they are; earned ones open like notes.
 // Until "Show all" is pressed, only the earned ones and the few closest to unlocking show.
 const STICKERS_NEXT = 3;
-let stickersSig = "", stickersAll = false;
+let stickersAll = false;
 function shownStickers() {
   if (stickersAll) return STICKERS;
   const ratio = k => { const p = milestoneProgress(state, k); return p.have / p.need; };
@@ -200,55 +377,44 @@ function shownStickers() {
   return STICKERS.filter(k => state.stickers[k.id] || next.includes(k));
 }
 function renderStickers() {
-  const sig = JSON.stringify([state.stickers, lifetime(state), stickersAll]);
-  if (sig === stickersSig) return;
-  stickersSig = sig;
-  const ul = $("stickerList"), shown = shownStickers();
+  if (!changed("stickers", state.stickers, lifetime(state), stickersAll)) return;
+  const ul = $("stickerList"), shown = shownStickers(), more = $("stickersMore");
   ul.innerHTML = "";
-  $("stickersMore").hidden = !stickersAll && shown.length === STICKERS.length;
-  $("stickersMore").textContent = stickersAll ? "Show fewer" : `Show all ${STICKERS.length} stickers`;
-  $("stickersMore").setAttribute("aria-expanded", stickersAll);
+  more.hidden = !stickersAll && shown.length === STICKERS.length;
+  more.textContent = stickersAll ? "Show fewer" : `Show all ${STICKERS.length} stickers`;
+  more.setAttribute("aria-expanded", stickersAll);
   shown.forEach(k => {
-    const li = document.createElement("li"), got = state.stickers[k.id];
-    const el = document.createElement(got ? "button" : "div");
-    el.className = "sticker" + (got ? "" : " locked");
-    el.innerHTML = pixelSvg(STICKER_ICONS[k.icon]);
-    const label = document.createElement("span");
+    const li = el("li"), got = state.stickers[k.id];
+    const box = el(got ? "button" : "div", "sticker" + (got ? "" : " locked"));
+    box.innerHTML = pixelSvg(STICKER_ICONS[k.icon]);
     if (got) {
-      label.textContent = k.label;
-      el.append(label);
-      if (!got.read) { const nb = document.createElement("span"); nb.className = "new"; nb.textContent = "New"; el.append(nb); }
-      el.addEventListener("click", () => openSticker(k));
+      box.append(el("span", "", k.label));
+      if (!got.read) box.append(newTag());
+      box.addEventListener("click", () => openSticker(k));
     } else {
       const [key] = Object.keys(k.need), p = milestoneProgress(state, k), hours = key === "minutes";
-      label.textContent = STICKER_HINTS[key].replace("{n}", hours ? p.need / 60 : p.need);
-      const prog = document.createElement("span");
-      prog.className = "sticker-progress";
-      prog.textContent = hours ? `${Math.floor(p.have / 60)} of ${p.need / 60} hours` : `${p.have} of ${p.need}`;
-      el.append(label, prog);
+      box.append(el("span", "", STICKER_HINTS[key].replace("{n}", hours ? p.need / 60 : p.need)),
+        el("span", "sticker-progress", hours ? `${Math.floor(p.have / 60)} of ${p.need / 60} hours` : `${p.have} of ${p.need}`));
     }
-    li.appendChild(el);
+    li.append(box);
     ul.appendChild(li);
   });
 }
 $("stickersMore").addEventListener("click", () => { stickersAll = !stickersAll; render(); });
 function openSticker(k) {
-  $("noteTitle").textContent = `A sticker from ${nameOr()}: ${k.label}`;
-  $("noteText").textContent = k.text;
-  $("notePS").hidden = true;
   state.stickers[k.id].read = true;
-  save(); show($("noteDlg")); render();
+  showNote(`A sticker from ${nameOr()}: ${k.label}`, k.text, "");
 }
 
 /* ---------- Treats ---------- */
 function renderTreats() {
-  const st = stageIndex(state), n = state.treats;
-  $("treatRow").hidden = st === 0;
-  $("treatBtn").textContent = `Give ${nameOr()} a treat`;
+  const n = state.treats;
+  setHidden("treatRow", stageIndex(state) === 0);
+  setText("treatBtn", `Give ${nameOr()} a treat`);
   $("treatBtn").disabled = !canTreat(state);
-  $("treatCount").textContent = n
-    ? `${n} ${n === 1 ? "treat" : "treats"} saved${state.active ? ", for after this session" : ""}`
-    : state.settings.goal ? "Meet today's goal to earn a treat." : "Set a daily goal in Settings to earn treats.";
+  setText("treatCount", n
+    ? `${plural(n, "treat")} saved${state.active ? ", for after this session" : ""}`
+    : state.settings.goal ? "Meet today's goal to earn a treat." : "Set a daily goal in Settings to earn treats.");
 }
 $("treatBtn").addEventListener("click", () => {
   const now = Date.now(), full = heartsNow(state, now) === MAX_HEARTS;
@@ -259,86 +425,8 @@ $("treatBtn").addEventListener("click", () => {
   save(); render();
 });
 
-function render() {
-  const now = Date.now(), m = mood(state, now), st = stageIndex(state);
-  const unread = unreadNotes(state, NOTES) + unreadStickers(state, STICKERS);
-  const holiday = holidayNow(now), eating = st > 0 && now - treatAt < TREAT_MS;
-  draw(ctx, { now, mood: m, stage: st, hearts: heartsNow(state, now), unread, treats: state.treats, hatchAt, growAt, patAt, catchAt, treatAt, rm: RM, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state), holiday });
-  if (holiday) device.dataset.holiday = holiday.id;   // Halloween dims the LCD (styles.css)
-  else delete device.dataset.holiday;
-  canvas.setAttribute("aria-label", `${nameOr()}, ${STAGES[st].name}, ${MOOD_TEXT[m].toLowerCase()}${holiday && st > 0 ? `, dressed up for ${holiday.name}` : ""}${unread ? ", something new waiting" : ""}`);
-
-  let title = "Study Pet";
-  if (state.active) {
-    const left = fmt(focusLeft(state, now));
-    $("big").textContent = left; title = state.active.pausedAt ? `Paused ${left}` : `${left} Study Pet`;
-  } else if (state.onBreak) {
-    const left = fmt(state.onBreak.endAt - now);
-    $("big").textContent = left; title = `${left} Break`;
-  } else {
-    $("big").textContent = nameOr();
-  }
-  if (!isFlashing()) document.title = title;
-  $("small").textContent = now - hatchAt < HATCH_MS ? "Hatching!"
-    : eating ? "Yum!"
-    : m === "paused" ? `Paused, resumes in ${fmt(pauseLeft(state, now))}`
-    : m === "break" && state.onBreak.catches ? `${state.onBreak.catches} in a row!`
-    : m === "happy" && holiday ? holiday.greet : MOOD_TEXT[m];
-  $("patLbl").textContent = m === "break" ? "Catch" : "Pat";
-
-  $("focusLbl").textContent = state.active ? (now < stopArmed ? "Sure?" : "Stop")
-                            : state.onBreak ? "Next" : "Focus";   // six letters at most: they sit on the screen above each button
-  // During a session the middle key pauses (once) and resumes.
-  $("lengthLbl").textContent = !state.active ? "Length" : state.active.pausedAt ? "Resume" : "Pause";
-  $("keyLength").disabled = !!state.active && state.active.pauseUsed && !state.active.pausedAt;
-  // The screen's soft-key labels name each button's current action; screen readers get the same name.
-  [["keyFocus", "focusLbl"], ["keyLength", "lengthLbl"], ["keyPat", "patLbl"]].forEach(([key, lbl]) => {
-    $(key).setAttribute("aria-label", $(lbl).textContent);
-    $(lbl).classList.toggle("off", $(key).disabled);
-  });
-  document.querySelectorAll("#chips input").forEach(i => { i.disabled = !!state.active; i.checked = +i.value === state.length; });
-  document.querySelectorAll("#breakChips input").forEach(i => { i.checked = +i.value === state.breakLength; });
-  document.querySelectorAll("#longBreakChips input").forEach(i => { i.checked = +i.value === state.longBreak; });
-
-  $("petName").textContent = nameOr();
-  $("lead").hidden = lifetime(state).sessions >= LEAD_UNTIL;   // the intro is for the first few sessions
-  $("cardOpen").textContent = `Share a picture of ${nameOr()}`;
-  const inv = state.invite;
-  $("dedication").textContent = inv ? (inv.to ? `For ${inv.to}, from ${inv.from}` : `Invited by ${inv.from}`) : "";
-  $("dedication").hidden = !inv;
-  $("stStreak").textContent = streakNow(state, now);
-  $("stRest").textContent = state.restDays ? `+${state.restDays} rest ${state.restDays === 1 ? "day" : "days"}` : "";
-  $("stRest").title = state.restDays ? "Saved rest days cover a day you miss" : "";
-  $("stRest").hidden = !state.restDays;
-  renderGoal(now);
-  const total = lifetime(state);   // across every pet raised
-  $("stSessions").textContent = total.sessions;
-  $("stTime").textContent = fmtMinutes(total.minutes);
-  const nx = STAGES[st + 1], left = nx ? nx.at - state.sessions : 0;
-  $("next").textContent = nx
-    ? (st === 0 ? "One finished session hatches the egg."
-       : `${left} more ${left === 1 ? "session" : "sessions"} until ${nameOr()} grows.`)
-    : `${nameOr()} is fully grown. Keep the streak going.`;
-
-  renderBackupHint(now);
-  $("backupBtn").disabled = $("restoreBtn").disabled = testMode;
-  $("resetBtn").textContent = now < resetArmed ? "Tap again to erase everything" : "Start over";
-  $("testTag").hidden = !testMode;
-  renderNotes();
-  renderStickers();
-  renderTreats();
-  renderIcons(m, unread, now);
-  renderWeek(now);
-  renderSeal();
-  renderAlbum();
-  renderBadge();
-  renderShells();
-  renderMiniBar(now);
-}
-
 /* ---------- Tabs ---------- */
 // Today, Collection and Settings. The app always opens on Today.
-const LEAD_UNTIL = 3;
 const TABS = ["tabToday", "tabCollection", "tabSettings"];
 let lastTab = "tabToday";
 function selectTab(id, focus) {
@@ -361,33 +449,25 @@ TABS.forEach((t, i) => {
     selectTab(TABS[(to + TABS.length) % TABS.length], true);
   });
 });
-// The Collection tab counts what's new inside it: notes, stickers and an unsealed certificate.
-function renderBadge() {
-  const n = unreadNotes(state, NOTES) + unreadStickers(state, STICKERS) + (state.grownAt && !state.certSeen ? 1 : 0);
-  $("collectionBadge").hidden = !n;
-  $("collectionBadge").innerHTML = n ? `${n}<span class="sr-only"> new</span>` : "";
-  const shells = unseenShells(state, SHELLS);
-  $("settingsBadge").hidden = !shells;
-  $("settingsBadge").innerHTML = shells ? `${shells}<span class="sr-only"> new</span>` : "";
-}
 
 /* ---------- Timer bar ---------- */
 // When the device scrolls out of view during a session or break (mostly on
 // phones), a bar at the bottom keeps the time and the device's two timer keys in reach.
 // The device counts as out of view once its buttons have scrolled off the screen.
-const deviceInView = () => { const r = $("keyLength").getBoundingClientRect(); return r.bottom > 0 && r.top < innerHeight; };
+let deviceInView = true;
+new IntersectionObserver(([entry]) => { deviceInView = entry.isIntersecting; renderMiniBar(Date.now()); }).observe($("keyLength"));
 function renderMiniBar(now) {
-  const on = !!(state.active || state.onBreak) && !deviceInView();
-  $("miniBar").hidden = !on;
+  const on = !!(state.active || state.onBreak) && !deviceInView;
+  setHidden("miniBar", !on);
   document.body.classList.toggle("has-minibar", on);   // room at the bottom so the bar never covers the page
   if (!on) return;
   const a = state.active;
-  $("miniWhat").textContent = a ? (a.pausedAt ? "Paused" : "Focus") : "Break";
-  $("miniTime").textContent = a ? fmt(focusLeft(state, now)) : fmt(state.onBreak.endAt - now);
-  $("miniPause").hidden = !a;
-  $("miniPause").textContent = $("lengthLbl").textContent;
+  setText("miniWhat", a ? (a.pausedAt ? "Paused" : "Focus") : "Break");
+  setText("miniTime", a ? fmt(focusLeft(state, now)) : fmt(state.onBreak.endAt - now));
+  setHidden("miniPause", !a);
+  setText("miniPause", $("lengthLbl").textContent);
   $("miniPause").disabled = $("keyLength").disabled;
-  $("miniStop").textContent = a ? (now < stopArmed ? "Tap again to stop" : "Stop") : "End break";
+  setText("miniStop", a ? (now < stopArmed ? "Tap again to stop" : "Stop") : "End break");
 }
 $("miniPause").addEventListener("click", () => $("keyLength").click());
 $("miniStop").addEventListener("click", () => $("keyFocus").click());
@@ -396,50 +476,47 @@ $("miniStop").addEventListener("click", () => $("keyFocus").click());
 // Sealed card with progress until the pet is fully grown; then a button that opens it.
 function renderSeal() {
   const c = certificate(state, NOTES);
-  $("sealLocked").hidden = c.earned;
-  $("sealOpen").hidden = !c.earned;
-  $("sealNewPet").hidden = !c.earned;
-  if (c.earned) { $("sealNew").hidden = state.certSeen; return; }
-  $("sealHint").textContent = `Opens when ${nameOr()} is fully grown` + (state.invite && state.invite.letter ? `. ${state.invite.from} left a message inside.` : "");
+  setHidden("sealLocked", c.earned);
+  setHidden("sealOpen", !c.earned);
+  setHidden("sealNewPet", !c.earned);
+  if (c.earned) { setHidden("sealNew", state.certSeen); return; }
+  setText("sealHint", `Opens when ${nameOr()} is fully grown` + (state.invite && state.invite.letter ? `. ${state.invite.from} left a message inside.` : ""));
   $("sealFill").style.width = (c.progress / c.goal * 100) + "%";
   $("sealMeter").setAttribute("aria-valuemax", c.goal);
   $("sealMeter").setAttribute("aria-valuenow", c.progress);
-  $("sealCount").textContent = `${c.progress} of ${c.goal} sessions`;
+  setText("sealCount", `${c.progress} of ${c.goal} sessions`);
 }
 
-const longDate = t => new Date(t).toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
-const shortDate = t => new Date(t).toLocaleDateString(undefined, { month: "short", day: "numeric", year: "numeric" });
-
+// A still frame of just the pet (no hearts, no motion) for pictures: a grown-up unless `stage` says otherwise.
+const stillView = extra => ({ now: 1300, mood: "happy", stage: STAGES.length - 1, hearts: 0, unread: 0,
+  hatchAt: -1e12, growAt: -1e12, patAt: -1e12, rm: true, portrait: true, ...extra });
 // The grown pet from a certificate (or album entry), standing still, on any canvas.
-function drawPortrait(canvas, c) {
+function drawPortrait(target, c) {
   const pet = { name: c.name, seed: c.seed, traits: c.traits };
-  draw(canvas.getContext("2d"), { now: 1300, mood: "happy", stage: STAGES.length - 1, hearts: 0, unread: 0,
-    hatchAt: -1e12, growAt: -1e12, patAt: -1e12, rm: true, portrait: true,
-    dog: isPuppy(pet, DOG_NAMES), accessory: c.accessory, look: petLook(pet) });
+  draw(target.getContext("2d"), stillView({ dog: puppy(pet), accessory: c.accessory, look: petLook(pet) }));
 }
 
 // Shows a certificate: the current pet's, or one from the album.
 function openCertificate(c) {
-  const pet = c.name || "Your pet", puppy = isPuppy({ name: c.name }, DOG_NAMES);
+  const pet = c.name || "Your pet", dog = puppy({ name: c.name });
   $("certName").textContent = state.userName;
   $("certFor").textContent = c.since
     ? `for raising ${pet} from an egg to a grown-up, one focus session at a time, from ${longDate(c.since)} to ${longDate(c.grownAt)}.`
     : `for raising ${pet} from an egg to a grown-up, one focus session at a time. Fully grown on ${longDate(c.grownAt)}.`;
   const stats = [["Focus sessions", c.sessions], ["Focus time", fmtMinutes(c.minutes)],
-                 ["Longest streak", `${c.bestStreak} ${c.bestStreak === 1 ? "day" : "days"}`], ["Notes unlocked", `${c.notes} of ${c.totalNotes}`]];
-  $("certStats").innerHTML = "";
-  stats.forEach(([label, value]) => {
-    const div = document.createElement("div"), dt = document.createElement("dt"), dd = document.createElement("dd");
-    dt.textContent = label; dd.textContent = value;
-    div.append(dt, dd); $("certStats").appendChild(div);
-  });
-  $("certSigned").textContent = `Signed, ${pet}${puppy ? " (woof!)" : ""}`;
+                 ["Longest streak", plural(c.bestStreak, "day")], ["Notes unlocked", `${c.notes} of ${c.totalNotes}`]];
+  $("certStats").replaceChildren(...stats.map(([label, value]) => {
+    const div = el("div");
+    div.append(el("dt", "", label), el("dd", "", value));
+    return div;
+  }));
+  $("certSigned").textContent = `Signed, ${pet}${dog ? " (woof!)" : ""}`;
   $("certInvited").textContent = c.invitedBy ? `Invited to Study Pet by ${c.invitedBy}` : "";
   $("certInvited").hidden = !c.invitedBy;
   $("certMsg").textContent = c.letter ? `“${c.letter}”\nFrom ${c.letterFrom}` : "";
   $("certMsg").hidden = !c.letter;
   drawPortrait($("certPet"), c);
-  $("certLook").textContent = describeLook(petLook({ seed: c.seed, traits: c.traits }), puppy);
+  $("certLook").textContent = describeLook(petLook({ seed: c.seed, traits: c.traits }), dog);
   const current = c.seed === state.seed && !state.album.includes(c);
   $("certNewPet").hidden = !current;                 // only the current pet can move into the album
   if (current) { state.certSeen = true; save(); }
@@ -451,35 +528,31 @@ $("certPrint").addEventListener("click", () => window.print());
 
 /* ---------- Shareable picture ---------- */
 let cardBlob = null;
-const cardFile = () => `study-pet-${(state.name || "pet").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`;
+const cardFile = () => new File([cardBlob], `study-pet-${(state.name || "pet").toLowerCase().replace(/[^a-z0-9]+/g, "-")}.png`, { type: "image/png" });
 async function openCard() {
   const now = Date.now(), st = stageIndex(state);
   $("cardTitle").textContent = `Share a picture of ${nameOr()}`;
   $("cardStatus").textContent = "";
   $("cardImg").alt = `${nameOr()}, ${STAGES[st].name}, with ${state.sessions} sessions`;
   show($("cardDlg"));
-  const canvas = await drawCard(document.createElement("canvas"), {
+  const card = await drawCard(document.createElement("canvas"), {
     petName: nameOr(), userName: state.userName || "you", stageName: st === 0 ? "Still an egg" : `A ${STAGES[st].name}`,
     sessions: state.sessions, focus: fmtMinutes(state.minutes), streak: streakNow(state, now),
     shell: shellNow().id, url: (location.host + location.pathname).replace(/\/$/, ""),
-    pet: { now: 1300, mood: st === 0 ? "egg" : "happy", stage: st, hearts: 0, unread: 0, hatchAt: -1e12, growAt: -1e12, patAt: -1e12,
-           rm: true, portrait: true, dog: isPuppy(state, DOG_NAMES), accessory: accessory(state), look: petLook(state), holiday: holidayNow(now) }
+    pet: stillView({ mood: st === 0 ? "egg" : "happy", stage: st, holiday: holidayNow(now), ...petTraits() })
   });
-  render();   // the renderer was just pointed at the card's canvas; redraw the screen
-  cardBlob = await new Promise(r => canvas.toBlob(r, "image/png"));
+  cardBlob = await new Promise(r => card.toBlob(r, "image/png"));
   $("cardImg").src = URL.createObjectURL(cardBlob);
-  const file = new File([cardBlob], cardFile(), { type: "image/png" });
-  $("cardShare").hidden = !(navigator.canShare && navigator.canShare({ files: [file] }));
+  $("cardShare").hidden = !(navigator.canShare && navigator.canShare({ files: [cardFile()] }));
 }
 $("cardOpen").addEventListener("click", openCard);
 $("cardShare").addEventListener("click", () => {
-  const file = new File([cardBlob], cardFile(), { type: "image/png" });
-  navigator.share({ files: [file], title: `${nameOr()} on Study Pet`, text: `Studying with ${nameOr()} on Study Pet.` })
+  navigator.share({ files: [cardFile()], title: `${nameOr()} on Study Pet`, text: `Studying with ${nameOr()} on Study Pet.` })
     .catch(() => {});   // closing the share sheet isn't an error
 });
 $("cardSave").addEventListener("click", () => {
-  const a = document.createElement("a");
-  a.href = URL.createObjectURL(cardBlob); a.download = cardFile();
+  const a = el("a"), file = cardFile();
+  a.href = URL.createObjectURL(file); a.download = file.name;
   document.body.appendChild(a); a.click(); a.remove();
   $("cardStatus").textContent = "Saved. Look for it in your downloads.";
 });
@@ -497,38 +570,29 @@ function hatchNewPet() {
   if (!state.grownAt) return;
   const old = nameOr(), name = $("newPetName").value.trim() || "Pip";
   startNewPet(state, name, Date.now(), NOTES);
-  save(); hide($("newPetDlg")); notesSig = ""; albumSig = "";
+  save(); hide($("newPetDlg"));
   say(`${old} is in your album now. Say hello to ${name}, your ${ordinal(state.album.length + 1)} pet! One finished session hatches the egg.`);
   render();
 }
-const ordinal = n => n + (n % 100 >= 11 && n % 100 <= 13 ? "th" : ["th", "st", "nd", "rd"][n % 10] || "th");
 $("sealNewPet").addEventListener("click", openNewPet);
 $("certNewPet").addEventListener("click", openNewPet);
 $("newPetGo").addEventListener("click", hatchNewPet);
 $("newPetName").addEventListener("keydown", e => { if (e.key === "Enter") hatchNewPet(); });
 
-let albumSig = "";
 function renderAlbum() {
-  const sig = JSON.stringify(state.album.map(e => e.seed));
-  if (sig === albumSig) return;
-  albumSig = sig;
-  $("album").hidden = !state.album.length;
-  const ul = $("albumList");
-  ul.innerHTML = "";
-  state.album.slice().reverse().forEach(e => {
-    const li = document.createElement("li"), canvas = document.createElement("canvas"), info = document.createElement("div");
-    const name = document.createElement("strong"), when = document.createElement("span"), btn = document.createElement("button");
-    canvas.width = 64; canvas.height = 48; canvas.setAttribute("aria-hidden", "true");
-    drawPortrait(canvas, e);
-    name.textContent = e.name;
-    when.textContent = `${e.since ? shortDate(e.since) + " to " : "Grown "}${shortDate(e.grownAt)}, ${e.sessions} sessions, ${fmtMinutes(e.minutes)}`;
-    btn.className = "link"; btn.textContent = "Certificate";
+  if (!changed("album", state.album.map(e => e.seed))) return;
+  setHidden("album", !state.album.length);
+  $("albumList").replaceChildren(...state.album.slice().reverse().map(e => {
+    const li = el("li"), pic = el("canvas"), info = el("div"), btn = el("button", "link", "Certificate");
+    pic.width = 64; pic.height = 48; pic.setAttribute("aria-hidden", "true");
+    drawPortrait(pic, e);
     btn.setAttribute("aria-label", `${e.name}'s certificate`);
     btn.addEventListener("click", () => openCertificate(e));
-    info.append(name, when, btn);
-    li.append(canvas, info);
-    ul.appendChild(li);
-  });
+    info.append(el("strong", "", e.name),
+      el("span", "", `${e.since ? shortDate(e.since) + " to " : "Grown "}${shortDate(e.grownAt)}, ${e.sessions} sessions, ${fmtMinutes(e.minutes)}`), btn);
+    li.append(pic, info);
+    return li;
+  }));
 }
 
 // Safari erases a website's data after 7 days without a visit unless it's on
@@ -538,62 +602,48 @@ function renderBackupHint(now) {
   const lastText = last ? `Last backed up ${last}.` : "Not backed up yet.";
   const safariRisk = isIOS() && !isInstalled() && state.sessions > 0;
   const nudge = !testMode && (safariRisk || needsBackup(state, now, dataKept || isInstalled()));
-  $("backupHint").textContent = testMode ? "Backup and restore are off in test mode."
+  setText("backupHint", testMode ? "Backup and restore are off in test mode."
     : safariRisk ? `${lastText} Safari can erase website data after 7 days without a visit. Add Study Pet to your Home Screen, or back up.`
     : nudge ? `${lastText} Your progress only lives in this browser, so it's worth backing up.`
     : dataKept && !last ? "Your browser will keep your progress. A backup helps if you switch devices."
-    : lastText;
+    : lastText);
   $("backupBtn").classList.toggle("nudge", nudge);
 }
 
+/* ---------- The week ---------- */
 // One column per day. Only the best day gets a value on its cap; the tooltip
 // and the screen-reader table carry the rest.
-let weekSig = "";
 const BAR_MAX = 64;   // px; the column leaves room above for the cap label
 function renderWeek(now) {
-  const week = lastWeek(state, now);
-  const sig = dayKey(now) + JSON.stringify(week.map(d => [d.minutes, d.sessions])) + state.settings.goal;
-  if (sig === weekSig) return;
-  weekSig = sig;
-
-  const total = week.reduce((a, d) => a + d.minutes, 0);
-  $("weekTotal").textContent = fmtMinutes(total);
+  const week = lastWeek(state, now), goal = state.settings.goal;
+  if (!changed("week", dayKey(now), week.map(d => [d.minutes, d.sessions]), goal)) return;
+  $("weekTotal").textContent = fmtMinutes(week.reduce((a, d) => a + d.minutes, 0));
   const top = Math.max(...week.map(d => d.minutes));
   const scale = Math.max(60, top);   // an hour fills the chart; light weeks don't look maxed out
-  const chart = $("weekChart"), rows = $("weekTable");
-  chart.innerHTML = ""; rows.innerHTML = "";
+  const days = [], rows = [];
   week.forEach((d, i) => {
-    const today = i === 6;
+    const today = i === 6, met = goal && d.sessions >= goal;
     const short = today ? "Today" : new Date(d.time).toLocaleDateString(undefined, { weekday: "short" });
     const long = today ? "Today" : new Date(d.time).toLocaleDateString(undefined, { weekday: "long", month: "short", day: "numeric" });
 
-    const day = document.createElement("div");
-    const met = state.settings.goal && d.sessions >= state.settings.goal;
-    day.className = "week-day" + (today ? " today" : "") + (met ? " met" : "");
-    day.dataset.tip = `${long}: ${d.minutes ? fmtMinutes(d.minutes) : "no focus time"}${state.settings.goal && d.sessions >= state.settings.goal ? ", goal met" : ""}`;
-    const col = document.createElement("div");
-    col.className = "week-col";
+    const day = el("div", "week-day" + (today ? " today" : "") + (met ? " met" : "")), col = el("div", "week-col");
+    day.dataset.tip = `${long}: ${d.minutes ? fmtMinutes(d.minutes) : "no focus time"}${met ? ", goal met" : ""}`;
     if (d.minutes) {
-      if (d.minutes === top) {
-        const cap = document.createElement("span");
-        cap.className = "week-cap"; cap.textContent = fmtMinutes(d.minutes);
-        col.appendChild(cap);
-      }
-      const bar = document.createElement("div");
-      bar.className = "week-bar";
+      if (d.minutes === top) col.append(el("span", "week-cap", fmtMinutes(d.minutes)));
+      const bar = el("div", "week-bar");
       bar.style.height = Math.max(3, Math.round(d.minutes / scale * BAR_MAX)) + "px";
-      col.appendChild(bar);
+      col.append(bar);
     }
-    const lbl = document.createElement("span");
-    lbl.className = "week-lbl"; lbl.textContent = short;
-    day.append(col, lbl);
-    chart.appendChild(day);
+    day.append(col, el("span", "week-lbl", short));
+    days.push(day);
 
-    const tr = document.createElement("tr");
-    const th = document.createElement("th"), td = document.createElement("td");
-    th.scope = "row"; th.textContent = long; td.textContent = fmtMinutes(d.minutes);
-    tr.append(th, td); rows.appendChild(tr);
+    const tr = el("tr"), th = el("th", "", long);
+    th.scope = "row";
+    tr.append(th, el("td", "", fmtMinutes(d.minutes)));
+    rows.push(tr);
   });
+  $("weekChart").replaceChildren(...days);
+  $("weekTable").replaceChildren(...rows);
 }
 
 // Hover (or tap) a day to see its exact time. The whole column is the target, not just the bar.
@@ -606,34 +656,21 @@ function showWeekTip(e) {
   const half = tip.offsetWidth / 2;   // keep the tip inside the card at the first and last day
   tip.style.left = Math.min(plot.width - half, Math.max(half, r.left - plot.left + r.width / 2)) + "px";
   // Sit just above the bar (or the baseline on an empty day), never above the chart's top.
-  const mark = day.querySelector(".week-bar") || day.querySelector(".week-col");
-  const anchor = mark.classList.contains("week-bar") ? mark.getBoundingClientRect().top : mark.getBoundingClientRect().bottom;
+  const bar = day.querySelector(".week-bar");
+  const anchor = bar ? bar.getBoundingClientRect().top : day.querySelector(".week-col").getBoundingClientRect().bottom;
   tip.style.top = Math.max(0, anchor - plot.top - tip.offsetHeight - 6) + "px";
 }
 $("weekChart").addEventListener("pointerover", showWeekTip);
 $("weekChart").addEventListener("pointerdown", showWeekTip);
 $("weekChart").addEventListener("pointerleave", () => { $("weekTip").hidden = true; });
 
-/* ---------- Dialogs ---------- */
-const show = d => (d.showModal ? d.showModal() : d.setAttribute("open", ""));
-const hide = d => (d.close ? d.close() : d.removeAttribute("open"));
-document.querySelectorAll("[data-close]").forEach(b => b.addEventListener("click", () => hide(b.closest("dialog"))));
-
-function openNote(n) {
-  $("noteTitle").textContent = `A note from ${nameOr()}`;
-  $("noteText").textContent = n.text;
-  const ps = notePS(state, n);
-  $("notePS").textContent = ps ? `P.S. from ${state.invite.from}: ${ps}` : "";
-  $("notePS").hidden = !ps;
-  state.notes[n.id].read = true;
-  save(); show($("noteDlg")); render();
-}
-
+/* ---------- Names ---------- */
 const nameDlg = $("nameDlg");
+const needsNames = () => !state.name || !state.userName;
 // Asks for the person's name and the pet's name: on a first visit, for older saves
 // without a person's name, and from "Change names".
 function openName() {
-  const first = !state.name || !state.userName;
+  const first = needsNames();
   $("nameTitle").textContent = first ? "Welcome to Study Pet" : "Change names";
   $("nameLead").hidden = !first;
   $("nameSave").textContent = first ? "Let's go" : "Save";
@@ -654,7 +691,7 @@ function saveName() {
 }
 $("nameSave").addEventListener("click", saveName);
 [$("userInput"), $("nameInput")].forEach(i => i.addEventListener("keydown", e => { if (e.key === "Enter") saveName(); }));
-nameDlg.addEventListener("cancel", e => { if (!state.name || !state.userName) e.preventDefault(); });
+nameDlg.addEventListener("cancel", e => { if (needsNames()) e.preventDefault(); });
 $("renameBtn").addEventListener("click", openName);
 
 /* ---------- Device buttons ---------- */
@@ -677,10 +714,7 @@ $("keyLength").addEventListener("click", () => {
     const now = Date.now();
     if (state.active.pausedAt) { resumeFocus(state, now); say("Back to it. The timer is running again."); }
     else if (pauseFocus(state, now)) say(`Paused. You have up to ${PAUSE_MAX} ${testMode ? "seconds" : "minutes"}; the timer resumes on its own after that.`);
-    save(); render();
-    return;
-  }
-  state.length = LENGTHS[(LENGTHS.indexOf(state.length) + 1) % LENGTHS.length] || 25;
+  } else state.length = LENGTHS[(LENGTHS.indexOf(state.length) + 1) % LENGTHS.length] || 25;
   save(); render();
 });
 // During a break, the Pat key (or a tap on the screen) catches the ball instead.
@@ -704,80 +738,46 @@ $("keyPat").addEventListener("click", () => {
   render();
 });
 
-LENGTHS.forEach(n => {
-  const label = document.createElement("label");
-  const input = document.createElement("input");
-  input.type = "radio"; input.name = "len"; input.value = n;
-  const span = document.createElement("span");
-  span.textContent = `${n} min`;
-  label.append(input, span);
-  input.addEventListener("change", () => { state.length = n; save(); render(); });
-  $("chips").appendChild(label);
-});
-
-// Break lengths. A new choice applies from the next break, so a break already running keeps its time.
+/* ---------- Session, break and goal choices ---------- */
+const lengthChips = chips("chips", "len", LENGTHS.map(n => [n, `${n} min`]), n => { state.length = n; save(); render(); });
+// A new break length applies from the next break, so a break already running keeps its time.
 // They look like the session chips ("15 min"), so screen readers get a fuller name ("15-minute break").
-function breakChip(row, name, n, aria, text, set) {
-  const label = document.createElement("label"), input = document.createElement("input"), span = document.createElement("span");
-  input.type = "radio"; input.name = name; input.value = n;
-  input.setAttribute("aria-label", aria);
-  span.textContent = text;
-  label.append(input, span);
-  input.addEventListener("change", () => {
-    set(n); save();
-    if (state.onBreak) say("Got it. The new length starts with your next break.");
-    render();
-  });
-  $(row).appendChild(label);
-}
-BREAKS.forEach(n => breakChip("breakChips", "brk", n, `${n}-minute break`, `${n} min`, v => { state.breakLength = v; }));
-LONG_BREAKS.forEach(n => breakChip("longBreakChips", "longBrk", n, n ? `${n}-minute long break` : "No long break",
-  n ? `${n} min` : "Off", v => { state.longBreak = v; }));
+const setBreak = apply => v => {
+  apply(v); save();
+  if (state.onBreak) say("Got it. The new length starts with your next break.");
+  render();
+};
+const breakChips = chips("breakChips", "brk", BREAKS.map(n => [n, `${n} min`, `${n}-minute break`]),
+  setBreak(v => { state.breakLength = v; }));
+const longBreakChips = chips("longBreakChips", "longBrk", LONG_BREAKS.map(n => [n, n ? `${n} min` : "Off", n ? `${n}-minute long break` : "No long break"]),
+  setBreak(v => { state.longBreak = v; }));
+const goalChips = chips("goalChips", "goal", GOALS.map(n => [n, n ? `${n} a day` : "Off"]), n => { state.settings.goal = n; save(); render(); });
 
-/* ---------- Daily goal ---------- */
 function renderGoal(now) {
   const g = goalToday(state, now);
-  $("goalLine").hidden = !g.goal;
-  if (!g.goal) return;
-  const dots = $("goalDots");
-  if (dots.childElementCount !== Math.max(g.goal, g.done) || dots.dataset.done !== String(g.done)) {
-    dots.innerHTML = "";
-    for (let i = 0; i < Math.max(g.goal, g.done); i++) {
-      const dot = document.createElement("span");
-      dot.className = i < g.done ? "on" : "";
-      dots.appendChild(dot);
-    }
-    dots.dataset.done = g.done;
-  }
+  setHidden("goalLine", !g.goal);
+  if (!g.goal || !changed("goal", g)) return;
+  $("goalDots").replaceChildren(...Array.from({ length: Math.max(g.goal, g.done) }, (_, i) => el("span", i < g.done ? "on" : "")));
   $("goalText").textContent = g.met ? `Today's goal done: ${g.done} of ${g.goal} sessions` : `Today: ${g.done} of ${g.goal} sessions`;
 }
-GOALS.forEach(n => {
-  const label = document.createElement("label"), input = document.createElement("input"), span = document.createElement("span");
-  input.type = "radio"; input.name = "goal"; input.value = n;
-  span.textContent = n ? `${n} a day` : "Off";
-  label.append(input, span);
-  input.addEventListener("change", () => { state.settings.goal = n; save(); render(); });
-  $("goalChips").appendChild(label);
-});
 
 /* ---------- Settings ---------- */
-// Match the checkboxes to the current state, after loading, restoring, resetting or switching test mode.
+// Match the controls to the current state, after loading, restoring, resetting or switching test mode.
 function syncSettings() {
-  $("soundToggle").checked = state.settings.sound;
-  if (notifySupported()) $("notifyToggle").checked = state.settings.notify && Notification.permission === "granted";
-  $("awakeToggle").checked = state.settings.awake;
-  $("vibrateToggle").checked = state.settings.vibrate;
-  $("holidayToggle").checked = state.settings.holidays;
-  document.querySelectorAll("#themeChips input").forEach(i => { i.checked = i.value === state.settings.theme; });
+  const s = state.settings;
+  $("soundToggle").checked = s.sound;
+  if (notifySupported()) $("notifyToggle").checked = s.notify && Notification.permission === "granted";
+  $("awakeToggle").checked = s.awake;
+  $("vibrateToggle").checked = s.vibrate;
+  $("holidayToggle").checked = s.holidays;
+  themeChips.select(s.theme);
+  goalChips.select(s.goal);
   applyTheme();
-  document.querySelectorAll('#goalChips input').forEach(i => { i.checked = +i.value === state.settings.goal; });
 }
-syncSettings();
 $("soundToggle").addEventListener("change", e => {
   state.settings.sound = e.target.checked; save();
   if (e.target.checked) { unlockAudio(); playChime([880]); }
 });
-
 if (!notifySupported()) $("notifyRow").hidden = true;
 else {
   $("notifyToggle").addEventListener("change", async e => {
@@ -789,22 +789,27 @@ else {
     if (!state.settings.notify) say("Desktop alerts are blocked here, so the chime and a flashing tab title will let you know instead.");
   });
 }
-
 if (!wakeLockSupported()) $("awakeRow").hidden = true;
 if (!vibrateSupported()) $("vibrateRow").hidden = true;
 $("vibrateToggle").addEventListener("change", e => { state.settings.vibrate = e.target.checked; save(); if (e.target.checked) buzz(80); });
 $("holidayToggle").addEventListener("change", e => { state.settings.holidays = e.target.checked; save(); render(); });
+$("awakeToggle").addEventListener("change", e => {
+  state.settings.awake = e.target.checked; save();
+  if (e.target.checked) say("The screen will stay on while a timer runs, so you'll hear when it's done.");
+});
 
 // Theme: follow the device, or always light or dark.
 // The shell decides the device, the screen colors and the page style; light and
 // dark apply to the shells that have both.
+const themeChips = chips("themeChips", "theme", THEMES.map(t => [t, t === "auto" ? "Match device" : t[0].toUpperCase() + t.slice(1)]),
+  t => { state.settings.theme = t; save(); applyTheme(); });
 function applyTheme() {
-  const t = state.settings.theme, shell = shellNow();
-  if (t === "auto") delete document.documentElement.dataset.theme;
-  else document.documentElement.dataset.theme = t;
-  document.documentElement.dataset.shell = shell.id;
+  const t = state.settings.theme, shell = shellNow(), root = document.documentElement;
+  if (t === "auto") delete root.dataset.theme;
+  else root.dataset.theme = t;
+  root.dataset.shell = shell.id;
   setPalette(shell.id);
-  document.querySelectorAll("#themeChips input").forEach(i => { i.disabled = !!shell.dark; });
+  themeChips.inputs.forEach(i => { i.disabled = !!shell.dark; });
   $("themeHint").hidden = !shell.dark;
   $("themeHint").textContent = shell.dark ? `${shell.name} is always dark.` : "";
 }
@@ -815,54 +820,36 @@ function shellNow() {
 }
 
 // Shell picker: a small device in each shell's colors. Locked shells say how to earn them.
-let shellsSig = "";
 function renderShells() {
-  const sig = JSON.stringify([state.shells, state.settings.shell, testMode, lifetime(state)]);
-  if (sig === shellsSig) return;
-  shellsSig = sig;
-  const box = $("shellPicker"), current = shellNow().id;
-  box.innerHTML = "";
-  SHELLS.forEach(k => {
-    const open = testMode || shellOpen(state, k), label = document.createElement("label"), input = document.createElement("input");
-    label.className = "shell-pick" + (open ? "" : " shell-locked");
+  if (!changed("shells", state.shells, state.settings.shell, testMode, lifetime(state))) return;
+  const current = shellNow().id;
+  $("shellPicker").replaceChildren(...SHELLS.map(k => {
+    const open = testMode || shellOpen(state, k), label = el("label", "shell-pick" + (open ? "" : " shell-locked")), input = el("input");
     input.type = "radio"; input.name = "shell"; input.value = k.id; input.checked = k.id === current; input.disabled = !open;
     input.addEventListener("change", () => {
       state.settings.shell = k.id;
       if (state.shells[k.id]) state.shells[k.id].seen = true;
       save(); applyTheme(); render();
     });
-    const pic = document.createElement("span"), name = document.createElement("strong"), about = document.createElement("span");
-    pic.className = "shell-mini"; pic.dataset.shellMini = k.id; pic.setAttribute("aria-hidden", "true");
-    name.textContent = k.name;
-    if (open) about.textContent = k.blurb;
-    else {
+    const pic = el("span", "shell-mini");
+    pic.dataset.shellMini = k.id; pic.setAttribute("aria-hidden", "true");
+    let about = k.blurb;
+    if (!open) {
       const [key] = Object.keys(k.need), p = milestoneProgress(state, k);
-      about.textContent = `Locked: ${SHELL_HINTS[key].replace("{n}", p.need).toLowerCase()} (${p.have} of ${p.need})`;
+      about = `Locked: ${SHELL_HINTS[key].replace("{n}", p.need).toLowerCase()} (${p.have} of ${p.need})`;
     }
-    label.append(input, pic, name, about);
-    if (state.shells[k.id] && !state.shells[k.id].seen) { const nb = document.createElement("span"); nb.className = "new"; nb.textContent = "New"; label.append(nb); }
-    box.appendChild(label);
-  });
+    label.append(input, pic, el("strong", "", k.name), el("span", "", about));
+    if (state.shells[k.id] && !state.shells[k.id].seen) label.append(newTag());
+    return label;
+  }));
 }
 // Newly earned shells stay marked New until you've looked at Settings and moved on.
 function markShellsSeen() {
-  let changed = false;
-  SHELLS.forEach(k => { const got = state.shells[k.id]; if (got && !got.seen) { got.seen = true; changed = true; } });
-  if (changed) { save(); render(); }
+  const unseen = SHELLS.map(k => state.shells[k.id]).filter(got => got && !got.seen);
+  if (!unseen.length) return;
+  unseen.forEach(got => { got.seen = true; });
+  save(); render();
 }
-THEMES.forEach(t => {
-  const label = document.createElement("label"), input = document.createElement("input"), span = document.createElement("span");
-  input.type = "radio"; input.name = "theme"; input.value = t;
-  span.textContent = t === "auto" ? "Match device" : t[0].toUpperCase() + t.slice(1);
-  label.append(input, span);
-  input.addEventListener("change", () => { state.settings.theme = t; save(); applyTheme(); });
-  $("themeChips").appendChild(label);
-});
-syncSettings();   // the theme choices exist now, so mark the current one
-$("awakeToggle").addEventListener("change", e => {
-  state.settings.awake = e.target.checked; save();
-  if (e.target.checked) say("The screen will stay on while a timer runs, so you'll hear when it's done.");
-});
 
 /* ---------- Backup and restore ---------- */
 const backupText = () => exportBackup(state, Date.now());
@@ -885,12 +872,10 @@ $("dlBtn").addEventListener("click", async () => {
   }
 });
 $("copyBtn").addEventListener("click", async () => {
-  const ta = $("backupCode");
-  let ok = false;
-  try { await navigator.clipboard.writeText(ta.value); ok = true; }
-  catch (e) { ta.select(); try { ok = document.execCommand("copy"); } catch (e2) { ok = false; } }
-  if (ok) { markBackedUp(); $("backupStatus").textContent = "Copied. Paste it somewhere safe, like a note or an email to yourself."; }
-  else $("backupStatus").textContent = "Select all the text in the box and copy it.";
+  if (await copyText($("backupCode").value, $("backupCode"))) {
+    markBackedUp();
+    $("backupStatus").textContent = "Copied. Paste it somewhere safe, like a note or an email to yourself.";
+  } else $("backupStatus").textContent = "Select all the text in the box and copy it.";
 });
 
 $("restoreBtn").addEventListener("click", () => {
@@ -903,9 +888,8 @@ $("restoreFile").addEventListener("change", async e => {
 });
 $("restoreGo").addEventListener("click", () => {
   try {
-    state = importBackup($("restoreCode").value, Date.now());
-    save(); notesSig = "";
-    syncSettings();
+    replaceState(importBackup($("restoreCode").value, Date.now()));
+    save();
     hide($("restoreDlg"));
     say(`Welcome back, ${nameOr()}! Your progress is restored.`);
     render();
@@ -916,17 +900,19 @@ $("restoreGo").addEventListener("click", () => {
 
 $("resetBtn").addEventListener("click", () => {
   if (Date.now() < resetArmed) {
-    const userName = state.userName;   // starting over is a new pet, not a new person
-    state = createState(Date.now()); state.userName = userName; save(); resetArmed = 0; notesSig = ""; syncSettings(); say(""); render(); openName();
+    const fresh = createState(Date.now());
+    fresh.userName = state.userName;   // starting over is a new pet, not a new person
+    replaceState(fresh); save(); resetArmed = 0; say(""); render(); openName();
   } else { resetArmed = Date.now() + 4000; render(); }
 });
 
-/* Press T (outside text fields and dialogs) to toggle test mode: sessions last seconds instead of minutes */
+/* ---------- Test mode and keys ---------- */
+// Press T (outside text fields and dialogs) to toggle test mode: sessions last seconds instead of minutes.
 function setTestMode(on) {
   testMode = on;
-  if (!on) state = migrate(store.load(), Date.now());   // drop the practice copy, back to the real save
-  hatchAt = growAt = patAt = treatAt = 0; stopArmed = resetArmed = 0; notesSig = stickersSig = ""; previewHoliday = -1;
-  stopFlash(); syncSettings();
+  replaceState(on ? state : migrate(store.load(), Date.now()));   // leaving drops the practice copy, back to the real save
+  hatchAt = growAt = patAt = treatAt = 0; stopArmed = resetArmed = 0; previewHoliday = -1;
+  stopFlash();
   say(on ? "Test mode on. Sessions last seconds, and nothing here is saved."
          : `Test mode off. Back to ${nameOr()}'s real progress.`);
   render();
@@ -961,40 +947,30 @@ document.addEventListener("keydown", e => {
 
 /* ---------- Invites ---------- */
 // Writing: the builder keeps what's typed if it's closed and reopened.
-const INVITE_ACCESSORIES = [[null, "None"], ["bow", "Bow"], ["flower", "Flower"], ["hat", "Party hat"]];
 $("invFrom").maxLength = $("invTo").maxLength = INVITE_LIMITS.name;
 $("invWelcome").maxLength = INVITE_LIMITS.welcome;
 $("invLetter").maxLength = INVITE_LIMITS.letter;
-INVITE_ACCESSORIES.forEach(([value, text]) => {
-  const label = document.createElement("label"), input = document.createElement("input"), span = document.createElement("span");
-  input.type = "radio"; input.name = "invAccessory"; input.value = value || ""; input.checked = !value;
-  span.textContent = text;
-  label.append(input, span);
-  $("invAccessories").appendChild(label);
-});
+const invAccessory = chips("invAccessories", "invAccessory", [[null, "None"], ["bow", "Bow"], ["flower", "Flower"], ["hat", "Party hat"]], drawInvitePreview);
+invAccessory.select(null);
 NOTES.forEach(n => {
-  const label = document.createElement("label"), span = document.createElement("span"), box = document.createElement("textarea");
-  label.className = "field";
-  span.textContent = `When they ${n.hint.charAt(0).toLowerCase() + n.hint.slice(1)}`.replace("your pet", "their pet");
+  const label = el("label", "field"), box = el("textarea");
   box.dataset.note = n.id; box.maxLength = INVITE_LIMITS.ps; box.placeholder = `Under: "${n.text}"`;
-  label.append(span, box);
+  label.append(el("span", "", `When they ${n.hint.charAt(0).toLowerCase() + n.hint.slice(1)}`.replace("your pet", "their pet")), box);
   $("invPS").appendChild(label);
 });
 
 function inviteFromForm() {
   const ps = {};
-  document.querySelectorAll("#invPS textarea").forEach(b => { ps[b.dataset.note] = b.value; });
+  $("invPS").querySelectorAll("textarea").forEach(b => { ps[b.dataset.note] = b.value; });
   return cleanInvite({
     from: $("invFrom").value, to: $("invTo").value, welcome: $("invWelcome").value, ps, letter: $("invLetter").value,
-    accessory: document.querySelector('input[name="invAccessory"]:checked').value || null
+    accessory: invAccessory.value()
   }, NOTES);
 }
-// Show the gifts on a teen pet as they're picked.
+// Show the gifts on a kid pet as they're picked.
 function drawInvitePreview() {
-  draw($("invPreview").getContext("2d"), { now: 1300, mood: "happy", stage: 2, hearts: 0, unread: 0, hatchAt: -1e12, growAt: -1e12, patAt: -1e12,
-    rm: true, portrait: true, accessory: document.querySelector('input[name="invAccessory"]:checked').value || null });
+  draw($("invPreview").getContext("2d"), stillView({ stage: 2, accessory: invAccessory.value() }));
 }
-$("invAccessories").addEventListener("change", drawInvitePreview);
 
 function openInvite() {
   $("invStatus").textContent = "";
@@ -1011,20 +987,15 @@ $("invMake").addEventListener("click", () => {
   $("invLink").value = `${location.origin}${location.pathname}#invite=${encodeInvite(inv)}`;
   $("invShare").hidden = !navigator.share;
   $("invOut").hidden = false;
-  const extras = inviteExtras(inv);
-  $("invStatus").textContent = (extras.length ? `Link ready with ${extras.length} ${extras.length === 1 ? "extra" : "extras"}.` : "Link ready.")
+  const extras = inviteExtras(inv).length;
+  $("invStatus").textContent = (extras ? `Link ready with ${plural(extras, "extra")}.` : "Link ready.")
     + " Anyone with the link can see what's in it.";
 });
 $("invCopy").addEventListener("click", async () => {
-  const input = $("invLink");
-  let ok = false;
-  try { await navigator.clipboard.writeText(input.value); ok = true; }
-  catch (e) { input.select(); try { ok = document.execCommand("copy"); } catch (e2) { ok = false; } }
-  $("invStatus").textContent = ok ? "Copied. Send it to your friend." : "Select the link and copy it.";
+  $("invStatus").textContent = await copyText($("invLink").value, $("invLink")) ? "Copied. Send it to your friend." : "Select the link and copy it.";
 });
 $("invShare").addEventListener("click", () => {
-  const inv = inviteFromForm();
-  navigator.share({ title: "Study Pet", text: `${inv.from} invited you to raise a study pet.`, url: $("invLink").value })
+  navigator.share({ title: "Study Pet", text: `${inviteFromForm().from} invited you to raise a study pet.`, url: $("invLink").value })
     .catch(() => {});   // closing the share sheet isn't an error
 });
 
@@ -1037,26 +1008,32 @@ function inviteExtras(inv) {
   return out;
 }
 
+// Links that carry something after the # (an invite or a whole pet): read once,
+// then taken out of the address so they stay out of bookmarks and history.
+function takeFromHash(kind) {
+  const m = location.hash.match(new RegExp(`^#${kind}=([\\w-]+)`));
+  if (m) history.replaceState(null, "", location.pathname + location.search);
+  return m && m[1];
+}
+
 // Receiving: open the app with #invite=... A brand-new pet takes it right
 // away; a pet with progress (or another invite) asks first.
 let pendingInvite = null;
 function useInvite(inv) {
-  applyInvite(state, inv); save(); notesSig = "";
+  applyInvite(state, inv); save();
   $("welcomeTitle").textContent = inv.to ? `For ${inv.to}, from ${inv.from}` : `${inv.from} invited you`;
   $("welcomeLead").textContent = `${inv.from} wants you to have a study pet. Finish focus sessions to hatch it and help it grow.`;
   $("welcomeMsg").textContent = inv.welcome;
   $("welcomeMsg").hidden = !inv.welcome;
-  $("welcomeExtras").innerHTML = "";
-  inviteExtras(inv).forEach(t => { const li = document.createElement("li"); li.textContent = t; $("welcomeExtras").appendChild(li); });
+  $("welcomeExtras").replaceChildren(...inviteExtras(inv).map(t => el("li", "", t)));
   render();
   show($("welcomeDlg"));
 }
 function receiveInvite() {
-  const m = location.hash.match(/^#invite=([\w-]+)/);
-  if (!m) return;
-  history.replaceState(null, "", location.pathname + location.search);   // keep it out of bookmarks and history
+  const code = takeFromHash("invite");
+  if (!code) return;
   let inv;
-  try { inv = decodeInvite(m[1], NOTES); } catch (e) { say(e.message); return; }
+  try { inv = decodeInvite(code, NOTES); } catch (e) { say(e.message); return; }
   if (testMode) { say("Leave test mode (press T), then open the invite link again."); return; }
   if (sameInvite(state.invite, inv)) return;
   if (state.sessions === 0 && !state.invite) { useInvite(inv); return; }
@@ -1071,8 +1048,7 @@ $("invAccept").addEventListener("click", () => {
   if (pendingInvite) useInvite(pendingInvite);
   pendingInvite = null;
 });
-$("welcomeDlg").addEventListener("close", () => { if (!state.name || !state.userName) openName(); });
-window.addEventListener("hashchange", receiveInvite);
+$("welcomeDlg").addEventListener("close", () => { if (needsNames()) openName(); });
 
 $("invPasteOpen").addEventListener("click", () => {
   $("invPasteInput").value = ""; $("invPasteStatus").textContent = "";
@@ -1082,16 +1058,16 @@ $("invPasteGo").addEventListener("click", () => {
   const m = $("invPasteInput").value.match(/#(invite|move)=([\w-]+)/);
   if (!m) { $("invPasteStatus").textContent = "That isn't a Study Pet invite or move link."; return; }
   hide($("invPasteDlg"));
-  location.hash = m[1] + "=" + m[2];   // the hashchange listeners take it from here
+  location.hash = m[1] + "=" + m[2];   // the hashchange listener takes it from here
 });
 
 /* ---------- Moving to another device ---------- */
 let moveLink = "";
-function drawQR(canvas, matrix) {
+function drawQR(target, matrix) {
   const border = 4, n = matrix.length + border * 2, scale = Math.max(2, Math.floor(560 / n));
-  canvas.width = canvas.height = n * scale;
-  const g = canvas.getContext("2d");
-  g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, canvas.width, canvas.height);
+  target.width = target.height = n * scale;
+  const g = target.getContext("2d");
+  g.fillStyle = "#FFFFFF"; g.fillRect(0, 0, target.width, target.height);
   g.fillStyle = "#000000";
   matrix.forEach((row, y) => row.forEach((dark, x) => { if (dark) g.fillRect((x + border) * scale, (y + border) * scale, scale, scale); }));
 }
@@ -1108,40 +1084,36 @@ async function openMove() {
 }
 $("moveBtn").addEventListener("click", openMove);
 $("moveCopy").addEventListener("click", async () => {
-  let ok = false;
-  try { await navigator.clipboard.writeText(moveLink); ok = true; } catch (e) { ok = false; }
-  $("moveStatus").textContent = ok ? "Copied. Open it on the other device, or paste it there with \"Paste a link\"." : "Copying didn't work here. Use Back up progress instead.";
+  $("moveStatus").textContent = await copyText(moveLink)
+    ? "Copied. Open it on the other device, or paste it there with \"Paste a link\"." : "Copying didn't work here. Use Back up progress instead.";
 });
 
 // Receiving: open the app with #move=... and confirm before replacing anything.
 let pendingMove = null;
 async function receiveMove() {
-  const m = location.hash.match(/^#move=([\w-]+)/);
-  if (!m) return;
-  history.replaceState(null, "", location.pathname + location.search);   // the link holds the whole pet; keep it out of history
+  const code = takeFromHash("move");   // the link holds the whole pet
+  if (!code) return;
   if (testMode) { say("Leave test mode (press T), then open the move link again."); return; }
-  try { pendingMove = importBackup(await decodeMove(m[1]), Date.now()); }
-  catch (e) { say(e.message); if (!state.name || !state.userName) openName(); return; }
+  try { pendingMove = importBackup(await decodeMove(code), Date.now()); }
+  catch (e) { say(e.message); if (needsNames()) openName(); return; }
   const p = pendingMove, here = state.sessions || state.album.length;
   $("moveAskTitle").textContent = `Move ${p.name || "a pet"} here?`;
-  $("moveAskText").textContent = `${p.name || "The pet"} has ${p.sessions} ${p.sessions === 1 ? "session" : "sessions"}`
+  $("moveAskText").textContent = `${p.name || "The pet"} has ${plural(p.sessions, "session")}`
     + (p.album.length ? `, with ${p.album.length} more in the album` : "") + (p.userName ? `, raised by ${p.userName}` : "") + "."
     + (here ? ` This replaces ${nameOr()} on this device.` : "");
   show($("moveAskDlg"));
 }
 $("moveAccept").addEventListener("click", () => {
   if (pendingMove) {
-    state = pendingMove; save();
-    notesSig = ""; albumSig = ""; weekSig = "";
-    syncSettings();
+    replaceState(pendingMove); save();
     say(`${nameOr()} moved over with all your progress. Welcome back, ${state.userName || "friend"}!`);
   }
   pendingMove = null;
   hide($("moveAskDlg"));
   render();
 });
-$("moveAskDlg").addEventListener("close", () => { pendingMove = null; if (!state.name || !state.userName) openName(); });
-window.addEventListener("hashchange", receiveMove);
+$("moveAskDlg").addEventListener("close", () => { pendingMove = null; if (needsNames()) openName(); });
+window.addEventListener("hashchange", () => { receiveInvite(); receiveMove(); });
 
 /* ---------- Installing ---------- */
 // When a new version takes over, offer a refresh rather than reloading mid-session.
@@ -1159,17 +1131,18 @@ if (isIOS() && !isInstalled()) {
 
 /* ---------- Main loop ---------- */
 function tick() {
-  handleEvent(tickState(state, Date.now(), NOTES));
+  const now = Date.now(), ev = tickState(state, now, NOTES);
+  handleEvent(ev);
   keepAwake(state.settings.awake && !!(state.active || state.onBreak));
-  render();
+  if (ev || Math.floor(now / 60000) !== panelsMinute) render(now);
+  else renderFrame(now);
 }
-addEventListener("scroll", () => renderMiniBar(Date.now()), { passive: true });
 document.addEventListener("visibilitychange", () => { if (!document.hidden) stopFlash(); tick(); });
 
+syncSettings();
 unlockNotes(state, Date.now(), NOTES);
 unlockStickers(state, Date.now(), STICKERS);   // older saves get the stickers they've already earned
 unlockShells(state, Date.now(), SHELLS);
-applyTheme();
 save();
 protectProgress();
 setInterval(tick, 100);
@@ -1178,7 +1151,7 @@ const arrivingMove = location.hash.startsWith("#move=");   // checked first: rec
 receiveInvite();
 receiveMove();   // asks first; if there's no pet here yet, the name prompt comes after
 if (!$("welcomeDlg").open && !$("invAskDlg").open && !arrivingMove) {
-  if (!state.name || !state.userName) openName();
+  if (needsNames()) openName();
   else if (!$("msg").textContent) {
     const h = holidayNow(Date.now());
     say(h ? `${h.greet.replace(/!$/, "")}, ${state.userName}! ${stageIndex(state) ? `${nameOr()} dressed up` : "Even the egg is ready"} for ${h.name}.` : `Hi, ${state.userName}! ${nameOr()} is ready when you are.`);
