@@ -1,5 +1,6 @@
-// A tiny static file server for the browser tests: node scripts/serve.mjs <folder> <port>
-// (The tests use this rather than `npx serve` so they need no download.)
+// A tiny static file server: node scripts/serve.mjs <folder> <port>. It serves the source
+// for `npm run dev`, the build for `npm run preview`, and the build for the browser tests.
+// (No download needed, unlike `npx serve`.)
 
 import { createServer } from "node:http";
 import { readFile } from "node:fs/promises";
