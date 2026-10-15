@@ -19,6 +19,7 @@ export const STAGES = [
   { name: "egg", at: 0 }, { name: "baby", at: 1 }, { name: "kid", at: 4 },
   { name: "teen", at: 10 }, { name: "grown-up", at: 20 }
 ];
+const GROWN_AT = STAGES[STAGES.length - 1].at;
 
 /* ---------- Dates ---------- */
 // Local calendar day, e.g. "2026-10-5". Streaks follow the user's own calendar.
@@ -71,7 +72,8 @@ export function createState(now, random = Math.random) {
 // had no treats or stickers; stickers already earned unlock on the next load.
 export function migrate(raw, now) {
   if (!raw || typeof raw !== "object") return createState(now);
-  const s = Object.assign(createState(now), raw);
+  const defaults = createState(now), s = { ...defaults, ...raw };
+  const count = (v, max = Infinity) => (Number.isInteger(v) ? Math.max(0, Math.min(max, v)) : 0);
   s.notes = raw.notes && typeof raw.notes === "object" ? raw.notes : {};
   if (!Number.isInteger(s.seed) || s.seed < 0) s.seed = newSeed();   // older pets get their own look once
   s.traits = cleanTraits(raw.traits);
@@ -81,35 +83,35 @@ export function migrate(raw, now) {
   // and an already grown pet counts as grown at its last session.
   s.bestStreak = Math.max(Number.isFinite(raw.bestStreak) ? raw.bestStreak : 0, Number.isFinite(raw.streak) ? raw.streak : 0);
   if (!Number.isFinite(s.firstStudyAt)) s.firstStudyAt = null;
-  if (!Number.isFinite(s.grownAt)) s.grownAt = s.sessions >= STAGES[STAGES.length - 1].at ? (s.lastStudyAt || now) : null;
+  if (!Number.isFinite(s.grownAt)) s.grownAt = s.sessions >= GROWN_AT ? (s.lastStudyAt || now) : null;
   // Older saves kept a name only on the certificate, or got one from an invite.
   const userName = [raw.userName, raw.certName, raw.invite && raw.invite.to].find(v => typeof v === "string" && v.trim());
   s.userName = userName ? userName.trim().slice(0, USER_NAME_MAX) : "";
   delete s.certName;
-  s.days = {};
-  if (raw.days && typeof raw.days === "object")
-    for (const [k, v] of Object.entries(raw.days)) if (Number.isFinite(v) && v > 0) s.days[k] = v;
-  s.daySessions = {};
-  if (raw.daySessions && typeof raw.daySessions === "object")
-    for (const [k, v] of Object.entries(raw.daySessions)) if (Number.isInteger(v) && v > 0) s.daySessions[k] = v;
-  s.bestCatches = Number.isInteger(raw.bestCatches) && raw.bestCatches > 0 ? raw.bestCatches : 0;
-  if (!BREAKS.includes(s.breakLength)) s.breakLength = 5;         // saves from before break choices get the old lengths
-  if (!LONG_BREAKS.includes(s.longBreak)) s.longBreak = 15;
-  s.treats = Number.isInteger(raw.treats) ? Math.max(0, Math.min(TREAT_MAX, raw.treats)) : 0;
-  s.treatsGiven = Number.isInteger(raw.treatsGiven) && raw.treatsGiven > 0 ? raw.treatsGiven : 0;
-  s.stickers = {};
-  if (raw.stickers && typeof raw.stickers === "object")
-    for (const [k, v] of Object.entries(raw.stickers)) if (v && Number.isFinite(v.at)) s.stickers[k] = { at: v.at, read: !!v.read };
-  s.shells = {};
-  if (raw.shells && typeof raw.shells === "object")
-    for (const [k, v] of Object.entries(raw.shells)) if (v && Number.isFinite(v.at)) s.shells[k] = { at: v.at, seen: !!v.seen };
-  s.restDays = Number.isInteger(raw.restDays) ? Math.max(0, Math.min(MAX_REST, raw.restDays)) : 0;
-  if (!GOALS.includes(s.settings.goal)) s.settings.goal = 2;
+  s.days = cleanRecord(raw.days, v => (Number.isFinite(v) && v > 0 ? v : null));
+  s.daySessions = cleanRecord(raw.daySessions, v => (Number.isInteger(v) && v > 0 ? v : null));
+  s.stickers = cleanRecord(raw.stickers, v => (v && Number.isFinite(v.at) ? { at: v.at, read: !!v.read } : null));
+  s.shells = cleanRecord(raw.shells, v => (v && Number.isFinite(v.at) ? { at: v.at, seen: !!v.seen } : null));
+  s.bestCatches = count(raw.bestCatches);
+  s.treats = count(raw.treats, TREAT_MAX);
+  s.treatsGiven = count(raw.treatsGiven);
+  s.restDays = count(raw.restDays, MAX_REST);
+  // Saves from before break choices get the old lengths.
+  if (!BREAKS.includes(s.breakLength)) s.breakLength = defaults.breakLength;
+  if (!LONG_BREAKS.includes(s.longBreak)) s.longBreak = defaults.longBreak;
+  s.settings = { ...defaults.settings, ...raw.settings };
+  if (!GOALS.includes(s.settings.goal)) s.settings.goal = defaults.settings.goal;
   if (!THEMES.includes(s.settings.theme)) s.settings.theme = "auto";
-  s.settings = Object.assign(createState(now).settings, raw.settings || {});
   if (!raw.version) s.onBreak = null;
   s.version = SAVE_VERSION;
   return s;
+}
+// A copy of an object's entries, each passed through `clean`; null drops the entry.
+function cleanRecord(raw, clean) {
+  const out = {};
+  if (raw && typeof raw === "object")
+    for (const [k, v] of Object.entries(raw)) { const c = clean(v); if (c !== null) out[k] = c; }
+  return out;
 }
 
 /* ---------- Derived values (computed, never stored) ---------- */
@@ -117,11 +119,7 @@ export function heartsNow(s, now) {
   const faded = Math.floor((now - s.heartsAt) / HEART_MS);
   return Math.max(0, Math.min(MAX_HEARTS, s.hearts - faded));
 }
-export function stageIndex(s) {
-  let i = 0;
-  STAGES.forEach((st, k) => { if (s.sessions >= st.at) i = k; });
-  return i;
-}
+export const stageIndex = s => STAGES.reduce((i, st, k) => (s.sessions >= st.at ? k : i), 0);
 // Calendar days since the last study day (0 = today).
 function daysSinceStudy(s, now) {
   if (s.lastStudyAt) return daysAgo(s.lastStudyAt, now);
@@ -393,9 +391,8 @@ export function unreadNotes(s, notesList) {
 // It carries everything needed to show it again later, so an album entry is
 // just a saved copy of the certificate.
 export function certificate(s, notesList) {
-  const goal = STAGES[STAGES.length - 1].at;
   return {
-    earned: !!s.grownAt, goal, progress: Math.min(s.sessions, goal),
+    earned: !!s.grownAt, goal: GROWN_AT, progress: Math.min(s.sessions, GROWN_AT),
     name: s.name, seed: s.seed, traits: { ...s.traits }, accessory: accessory(s),
     sessions: s.sessions, minutes: s.minutes, bestStreak: s.bestStreak,
     notes: notesList.filter(n => s.notes[n.id]).length, totalNotes: notesList.length,
@@ -516,6 +513,14 @@ export function cleanInvite(raw, notesList) {
   };
 }
 
+// Bytes <-> base64url, the link-safe text that invite and move links carry.
+export function toBase64Url(bytes) {
+  let bin = "";
+  for (const b of bytes) bin += String.fromCharCode(b);
+  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+}
+export const fromBase64Url = text => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
+
 // Invite <-> link-safe text: base64url of UTF-8 JSON (any language and emoji
 // work), with short keys and empty fields left out to keep links short.
 const KEYS = [["from", "f"], ["to", "t"], ["welcome", "w"], ["ps", "p"], ["letter", "l"], ["accessory", "a"]];
@@ -525,16 +530,12 @@ export function encodeInvite(inv) {
     const val = inv[k];
     if (val && !(typeof val === "object" && !Object.keys(val).length)) short[s] = val;
   });
-  const bytes = new TextEncoder().encode(JSON.stringify(short));
-  let bin = "";
-  bytes.forEach(b => { bin += String.fromCharCode(b); });
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+  return toBase64Url(new TextEncoder().encode(JSON.stringify(short)));
 }
 export function decodeInvite(code, notesList) {
   let raw = null;
   try {
-    const bin = atob(code.replace(/-/g, "+").replace(/_/g, "/"));
-    const short = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(Uint8Array.from(bin, c => c.charCodeAt(0))));
+    const short = JSON.parse(new TextDecoder("utf-8", { fatal: true }).decode(fromBase64Url(code)));
     raw = {};
     KEYS.forEach(([k, s]) => { raw[k] = short[s]; });
   } catch (e) { raw = null; }

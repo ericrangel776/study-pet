@@ -2,14 +2,10 @@
 // (#move=...) that a QR code or a pasted link carries. The receiving side
 // checks it like a backup before using it.
 
+import { toBase64Url, fromBase64Url } from "./engine.js";
+
 const MOVE_COMPRESSED = "z", MOVE_PLAIN = "j";   // first character: how the rest is packed
 
-function toBase64Url(bytes) {
-  let bin = "";
-  bytes.forEach(b => { bin += String.fromCharCode(b); });
-  return btoa(bin).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
-}
-const fromBase64Url = text => Uint8Array.from(atob(text.replace(/-/g, "+").replace(/_/g, "/")), c => c.charCodeAt(0));
 async function pipe(bytes, stream) {
   return new Uint8Array(await new Response(new Blob([bytes]).stream().pipeThrough(stream)).arrayBuffer());
 }
